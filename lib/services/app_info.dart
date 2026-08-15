@@ -32,9 +32,10 @@ class AppInfo {
 
   /// 更新检查地址:托管一个 HTTPS 可达的 latest.json,内容形如
   /// {"version":"1.2.0","note":"…","apk":"https://…/chronos-1.2.0.apk"}
-  /// 真实地址:GitHub Raw(APK 放在仓库 releases/ 目录,见 D:\dev\student_workbench\releases\)
+  /// 真实地址:腾讯云 COS(国内直连,APK 在 releases/ 目录,见 D:\dev\student_workbench\releases\)。
+  /// GitHub 仓库 curcoco/chronos 仅作源码备份/镜像,不再作为更新源。
   static const String updateCheckUrl =
-      'https://raw.githubusercontent.com/curcoco/chronos/main/latest.json';
+      'https://chronos-update-1456265383.cos.ap-guangzhou.myqcloud.com/latest.json';
 
   /// 从打包进 APK 的 pubspec.yaml 读取安装版本(如 1.2.0+3 → 1.2.0)
   static Future<String> installedVersion() async {

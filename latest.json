@@ -1,5 +1,5 @@
 {
   "version": "1.2.0",
   "note": "新增侧边栏与随机任务;完成/取消任务增加确认弹窗,取消完成自动收回金币",
-  "apk": "https://raw.githubusercontent.com/curcoco/chronos/main/releases/chronos-1.2.0.apk"
+  "apk": "https://chronos-update-1456265383.cos.ap-guangzhou.myqcloud.com/releases/chronos-1.2.0.apk"
 }
