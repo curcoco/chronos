@@ -16,7 +16,7 @@ class StudentWorkbenchApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '工作台',
+      title: 'Chronos',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       home: const SplashPage(),

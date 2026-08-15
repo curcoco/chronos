@@ -114,7 +114,7 @@ class _SplashPageState extends State<SplashPage> {
                 ),
                 const SizedBox(height: 14),
                 const Text(
-                  '工作台',
+                  'Chronos',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w700,

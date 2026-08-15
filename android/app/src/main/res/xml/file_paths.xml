@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 更新下载的 APK 存放在应用外部缓存目录(UpdateInstaller 下载路径),这里暴露给 FileProvider -->
+<paths>
+    <external-cache-path name="external_cache" path="." />
+    <cache-path name="cache" path="." />
+</paths>

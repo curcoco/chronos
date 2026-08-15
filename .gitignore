@@ -47,5 +47,7 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 
-# 构建产物:根目录 APK(已有一份放进 releases/ 供托管,避免重复提交)
+# 构建产物:根目录 APK + releases/ 下的 APK。
+# APK 只放腾讯云 COS 当更新源,不进 git(git 仅作源码备份),避免仓库被二进制撑爆。
 /app-release.apk
+/releases/*.apk

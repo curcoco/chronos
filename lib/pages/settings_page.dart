@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/app_info.dart';
 import '../theme.dart';
 import '../widgets/section_card.dart';
+import '../widgets/update_download_button.dart';
 
 /// 系统设置:关于(应用名、简介)+ 版本号与更新状态
 class SettingsPage extends StatefulWidget {
@@ -81,7 +82,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            '学生学习工作台',
+                            'Chronos',
                             style: TextStyle(
                               fontSize: 19,
                               fontWeight: FontWeight.w800,
@@ -126,6 +127,12 @@ class _SettingsPageState extends State<SettingsPage> {
                     style: const TextStyle(
                         fontSize: 12, color: AppColors.textSub),
                   ),
+                ],
+                if (status != null &&
+                    status.updateAvailable &&
+                    status.apkUrl != null) ...[
+                  const SizedBox(height: 12),
+                  UpdateDownloadButton(apkUrl: status.apkUrl!),
                 ],
                 const SizedBox(height: 12),
                 SizedBox(

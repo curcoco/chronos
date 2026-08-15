@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/app_info.dart';
 import '../theme.dart';
+import '../widgets/update_download_button.dart';
 import 'home_page.dart';
 import 'knowledge_page.dart';
 import 'life_page.dart';
@@ -134,7 +135,7 @@ class _AppDrawerState extends State<_AppDrawer> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '学生学习工作台',
+                        'Chronos',
                         style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w800,
@@ -208,6 +209,7 @@ class _AppDrawerState extends State<_AppDrawer> {
     final status = _status;
     final checking = status == null;
     final latest = status?.latestVersion ?? '…';
+    final apkUrl = status?.apkUrl;
     // 状态配色与文案
     late final Color chipBg;
     late final Color chipFg;
@@ -333,6 +335,10 @@ class _AppDrawerState extends State<_AppDrawer> {
               '更新说明:${status.note}',
               style: const TextStyle(fontSize: 12, color: AppColors.textSub),
             ),
+          ],
+          if (!checking && status.updateAvailable && apkUrl != null) ...[
+            const SizedBox(height: 10),
+            UpdateDownloadButton(apkUrl: apkUrl),
           ],
         ],
       ),

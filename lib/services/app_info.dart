@@ -13,22 +13,25 @@ class UpdateStatus {
   final String latestVersion;
   /// 更新说明(远程 JSON 的 note 字段)
   final String? note;
+  /// 新版本 APK 直链(远程 JSON 的 apk 字段;离线兜底为 null)
+  final String? apkUrl;
 
   const UpdateStatus({
     required this.reachable,
     required this.updateAvailable,
     required this.latestVersion,
     this.note,
+    this.apkUrl,
   });
 }
 
 /// 应用信息:版本号读取与更新检查。
-/// 本项目唯一联网点:更新检查(其余功能全部零网络)。
+/// 本项目唯一联网点:更新检查与 APK 下载(其余功能全部零网络)。
 class AppInfo {
   AppInfo._();
 
   /// 离线兜底用的「最新版本」参照,每次发版时与 pubspec.yaml 的 version 同步更新。
-  static const String latestVersion = '1.2.0';
+  static const String latestVersion = '1.3.2';
 
   /// 更新检查地址:托管一个 HTTPS 可达的 latest.json,内容形如
   /// {"version":"1.2.0","note":"…","apk":"https://…/chronos-1.2.0.apk"}
@@ -60,6 +63,7 @@ class AppInfo {
             installed.isNotEmpty && _compare(installed, remote.version) < 0,
         latestVersion: remote.version,
         note: remote.note,
+        apkUrl: remote.apk,
       );
     }
     return UpdateStatus(
@@ -71,7 +75,8 @@ class AppInfo {
   }
 
   /// 拉取远程最新版本信息;任何异常返回 null
-  static Future<({String version, String? note})?> _fetchRemoteLatest() async {
+  static Future<({String version, String? note, String? apk})?>
+      _fetchRemoteLatest() async {
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 5);
     try {
@@ -87,7 +92,12 @@ class AppInfo {
       final version = data['version'];
       if (version is! String || version.isEmpty) return null;
       final note = data['note'];
-      return (version: version, note: note is String ? note : null);
+      final apk = data['apk'];
+      return (
+        version: version,
+        note: note is String ? note : null,
+        apk: apk is String && apk.isNotEmpty ? apk : null,
+      );
     } catch (_) {
       return null;
     } finally {
