@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
-import 'placeholder_page.dart';
+import '../widgets/module_card.dart';
+import 'english_page.dart';
 
-/// 知识 Tab(本批为占位页)
+/// 知识 Tab:第二批模块入口(英文积累等)
 class KnowledgePage extends StatelessWidget {
   const KnowledgePage({super.key});
 
@@ -13,8 +14,8 @@ class KnowledgePage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+          Padding(
+            padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
             child: Text(
               '知识',
               style: TextStyle(
@@ -24,11 +25,26 @@ class KnowledgePage extends StatelessWidget {
               ),
             ),
           ),
-          const Expanded(
-            child: PlaceholderPage(
-              icon: Icons.school_rounded,
-              title: '知识星球',
-              description: '学习资料与知识库正在筹备中,敬请期待',
+          Padding(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: Text(
+              '每日学习与积累',
+              style: TextStyle(fontSize: 13, color: AppColors.textSub),
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              children: [
+                ModuleCard(
+                  icon: Icons.translate_rounded,
+                  title: '英文积累',
+                  desc: '每日一句 / 单词 / 阅读 / 写作,可收藏,打卡领金币',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const EnglishPage()),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

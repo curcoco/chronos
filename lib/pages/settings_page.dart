@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../services/app_info.dart';
+import '../services/settings_service.dart';
 import '../theme.dart';
 import '../widgets/section_card.dart';
 import '../widgets/update_download_button.dart';
+import 'api_settings_page.dart';
 
 /// 系统设置:关于(应用名、简介)+ 版本号与更新状态
 class SettingsPage extends StatefulWidget {
@@ -56,7 +58,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       width: 56,
                       height: 56,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
+                        gradient: LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           colors: [AppColors.primaryLight, AppColors.primary],
@@ -81,7 +83,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Chronos',
                             style: TextStyle(
                               fontSize: 19,
@@ -124,7 +126,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   const SizedBox(height: 10),
                   Text(
                     '更新说明:${status.note}',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 12, color: AppColors.textSub),
                   ),
                 ],
@@ -154,11 +156,84 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text(
+                Text(
                   '纯本地存储,数据保存在设备上;仅版本更新检查需要联网。',
                   style: TextStyle(fontSize: 12, color: AppColors.textSub),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          SectionCard(
+            title: '外观',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '主题模式',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMain,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '深色模式适合夜间使用;跟随系统会随手机设置自动切换',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSub),
+                ),
+                const SizedBox(height: 12),
+                ValueListenableBuilder<ThemeMode>(
+                  valueListenable: SettingsService.instance.themeMode,
+                  builder: (context, mode, _) {
+                    return SegmentedButton<ThemeMode>(
+                      segments: const [
+                        ButtonSegment(
+                          value: ThemeMode.light,
+                          icon: Icon(Icons.light_mode_rounded, size: 18),
+                          label: Text('浅色'),
+                        ),
+                        ButtonSegment(
+                          value: ThemeMode.dark,
+                          icon: Icon(Icons.dark_mode_rounded, size: 18),
+                          label: Text('深色'),
+                        ),
+                        ButtonSegment(
+                          value: ThemeMode.system,
+                          icon: Icon(Icons.brightness_auto_rounded, size: 18),
+                          label: Text('跟随'),
+                        ),
+                      ],
+                      selected: {mode},
+                      showSelectedIcon: false,
+                      onSelectionChanged: (s) =>
+                          SettingsService.instance.setThemeMode(s.first),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          SectionCard(
+            title: '联网服务',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.vpn_key_rounded,
+                  size: 22, color: AppColors.primaryDark),
+              title: const Text(
+                'API 配置',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                '中转站 / 语音 / 天气 / 云端同步(密钥仅存本机)',
+                style: TextStyle(fontSize: 12, color: AppColors.textSub),
+              ),
+              trailing: Icon(Icons.chevron_right_rounded,
+                  size: 20, color: AppColors.textSub),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ApiSettingsPage()),
+              ),
             ),
           ),
         ],
@@ -172,8 +247,8 @@ class _SettingsPageState extends State<SettingsPage> {
     late final IconData icon;
     late final String text;
     if (status == null) {
-      bg = const Color(0xFFE3F0FA);
-      fg = AppColors.textSub;
+      bg = AppColors.primaryLight.withValues(alpha: 0.35);
+      fg = AppColors.primaryDark;
       icon = Icons.hourglass_top_rounded;
       text = '正在检查更新…';
     } else if (status.updateAvailable) {
@@ -187,7 +262,7 @@ class _SettingsPageState extends State<SettingsPage> {
       icon = Icons.check_circle_rounded;
       text = '已是最新版本';
     } else {
-      bg = const Color(0xFFEEF2F6);
+      bg = AppColors.line;
       fg = AppColors.textSub;
       icon = Icons.cloud_off_rounded;
       text = '无法连接更新服务器,请检查网络';
@@ -225,7 +300,7 @@ class _SettingsPageState extends State<SettingsPage> {
         const SizedBox(width: 10),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             color: AppColors.textSub,
             fontWeight: FontWeight.w600,
@@ -234,7 +309,7 @@ class _SettingsPageState extends State<SettingsPage> {
         const Spacer(),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,
             color: AppColors.textMain,

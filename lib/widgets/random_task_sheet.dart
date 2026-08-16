@@ -68,7 +68,7 @@ class _RandomTaskSheetState extends State<RandomTaskSheet> {
             ),
           ),
           const SizedBox(height: 6),
-          const Center(
+          Center(
             child: Text(
               '从任务池随机取一条加入今日清单,不影响每日自动生成的 3 条',
               textAlign: TextAlign.center,
@@ -132,7 +132,7 @@ class _RandomTaskSheetState extends State<RandomTaskSheet> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.casino_rounded,
+          Icon(Icons.casino_rounded,
               color: AppColors.primaryDark, size: 24),
           const SizedBox(width: 10),
           Expanded(
@@ -166,7 +166,7 @@ class _RandomTaskSheetState extends State<RandomTaskSheet> {
             ),
           ),
           if (_scheme == _PriorityScheme.random)
-            const Text(
+            Text(
               '优先级随机',
               style: TextStyle(fontSize: 11, color: AppColors.textSub),
             ),

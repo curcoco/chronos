@@ -23,4 +23,10 @@ class WishService {
         orderBy: 'redeemed ASC, created_at DESC');
     return rows.map(Wish.fromMap).toList();
   }
+
+  /// 删除心愿(仅删除清单条目,不影响已产生的金币收支记录)
+  Future<void> deleteWish(int id) async {
+    final db = await _db.database;
+    await db.delete('wishes', where: 'id = ?', whereArgs: [id]);
+  }
 }

@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 
+import '../data/daily_content.dart';
+import '../models/plan_item.dart';
 import '../models/student_task.dart';
 import '../services/task_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
 import '../widgets/add_task_sheet.dart';
+import '../widgets/frosted_snack.dart';
+import '../widgets/plan_list_view.dart';
 import '../widgets/random_task_sheet.dart';
 import '../widgets/section_card.dart';
 import '../widgets/task_confirm_dialog.dart';
-import 'placeholder_page.dart';
 
-/// 每日计划任务中心:今日清单(可交互)+ 本周计划/长期目标(静态占位)
+/// 每日计划任务中心:今日清单 + 本周计划 + 长期目标(均可交互)
 class PlanPage extends StatefulWidget {
   const PlanPage({super.key});
 
@@ -43,15 +46,14 @@ class _PlanPageState extends State<PlanPage> {
 
   void _showSnack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    showFrostedSnack(context, msg);
   }
 
   Future<void> _addTask() async {
     final result = await showModalBottomSheet<AddTaskResult>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -72,7 +74,7 @@ class _PlanPageState extends State<PlanPage> {
     final result = await showModalBottomSheet<AddTaskResult>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -88,7 +90,7 @@ class _PlanPageState extends State<PlanPage> {
       auto: true,
     );
     await _load();
-    _showSnack('已添加随机任务 🎲');
+    _showSnack('已添加随机任务');
   }
 
   Future<void> _toggleTask(StudentTask task) async {
@@ -98,15 +100,116 @@ class _PlanPageState extends State<PlanPage> {
     await _load();
     if (r.total != 0) {
       _showSnack(r.total > 0
-          ? '金币 +${r.total}${r.bonus > 0 ? '(含全部完成奖励 🎉)' : ''}'
+          ? '金币 +${r.total}${r.bonus > 0 ? '(含全部完成奖励)' : ''}'
           : '已收回金币 ${-r.total}');
     }
   }
 
-  Future<void> _deleteTask(StudentTask task) async {
+  /// 删除任务前弹窗:删除 / 系统随机生成同等优先级的任务
+  /// 今日任务最少 3 条:只剩 3 条时不允许直接删除,只能「系统随机生成」替换或取消。
+  Future<void> _confirmDeleteOrReplace(StudentTask task) async {
+    // 保底 3 条:只能随机替换或取消
+    if (_tasks.length <= 3) {
+      final replace = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('今日任务至少保留三条'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('系统随机生成'),
+            ),
+          ],
+        ),
+      );
+      if (replace != true || !mounted) return;
+      await _replaceWithRandom(task);
+      return;
+    }
+
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.delete_outline_rounded,
+                  color: Color(0xFFE53935)),
+              title: const Text('删除该任务'),
+              onTap: () => Navigator.of(context).pop('delete'),
+            ),
+            ListTile(
+              leading: Icon(Icons.casino_rounded,
+                  color: AppColors.primaryDark),
+              title: const Text('随机换一个'),
+              subtitle: const Text('系统随机生成同等优先级的任务'),
+              onTap: () => Navigator.of(context).pop('replace'),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              title: Center(
+                child: Text('取消',
+                    style: TextStyle(color: AppColors.textSub)),
+              ),
+              onTap: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    if (choice == 'delete') {
+      await _taskService.deleteTask(task.id!);
+      await _load();
+      _showSnack('已删除任务');
+    } else {
+      final exclude = _tasks.map((t) => t.title).toSet();
+      final t = DailyContent.randomAutoTask(exclude: exclude);
+      await _taskService.addTask(
+        title: t.title,
+        category: t.category,
+        priority: task.priority,
+        date: todayStr(),
+        auto: true,
+      );
+      await _taskService.deleteTask(task.id!);
+      await _load();
+      _showSnack('已随机换成同等优先级的任务');
+    }
+  }
+
+  /// 保底 3 条时的替换:弹随机任务弹层,优先级可「我来自选」或「系统随机」
+  Future<void> _replaceWithRandom(StudentTask task) async {
+    final result = await showModalBottomSheet<AddTaskResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) =>
+          RandomTaskSheet(excludeTitles: _tasks.map((t) => t.title).toSet()),
+    );
+    if (result == null || !mounted) return;
+    await _taskService.addTask(
+      title: result.title,
+      category: result.category,
+      priority: result.priority,
+      date: todayStr(),
+      auto: true,
+    );
     await _taskService.deleteTask(task.id!);
     await _load();
-    _showSnack('已删除任务');
+    _showSnack('已随机替换为一条新任务');
   }
 
   @override
@@ -119,7 +222,7 @@ class _PlanPageState extends State<PlanPage> {
             padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     '计划中心',
                     style: TextStyle(
@@ -131,7 +234,7 @@ class _PlanPageState extends State<PlanPage> {
                 ),
                 IconButton(
                   onPressed: () => Scaffold.of(context).openDrawer(),
-                  icon: const Icon(Icons.menu_rounded,
+                  icon: Icon(Icons.menu_rounded,
                       size: 22, color: AppColors.textSub),
                   tooltip: '菜单',
                 ),
@@ -156,15 +259,19 @@ class _PlanPageState extends State<PlanPage> {
                         : TabBarView(
                             children: [
                               _buildTodayList(),
-                              const PlaceholderPage(
-                                icon: Icons.calendar_month_rounded,
+                              const PlanListView(
+                                scope: PlanItem.scopeWeek,
                                 title: '本周计划',
-                                description: '周计划视图将在下一批开放,敬请期待',
+                                icon: Icons.calendar_month_rounded,
+                                hint: '把本周想推进的事列出来,完成后勾选',
+                                emptyText: '本周还没有计划\n点上方按钮添加第一条',
                               ),
-                              const PlaceholderPage(
-                                icon: Icons.flag_rounded,
+                              const PlanListView(
+                                scope: PlanItem.scopeLongTerm,
                                 title: '长期目标',
-                                description: '目标管理将在下一批开放,敬请期待',
+                                icon: Icons.flag_rounded,
+                                hint: '记录更长远的目标,拆成可执行的小步',
+                                emptyText: '还没有长期目标\n点上方按钮立个小目标吧',
                               ),
                             ],
                           ),
@@ -200,7 +307,7 @@ class _PlanPageState extends State<PlanPage> {
                   const Spacer(),
                   Text(
                     '${(progress * 100).round()}%',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                         color: AppColors.primaryDark),
@@ -213,13 +320,13 @@ class _PlanPageState extends State<PlanPage> {
                 child: LinearProgressIndicator(
                   value: progress,
                   minHeight: 8,
-                  backgroundColor: const Color(0xFFE3F0FA),
+                  backgroundColor: AppColors.line,
                   color: AppColors.primary,
                 ),
               ),
               const SizedBox(height: 10),
-              const Text(
-                '⭐ 完成单个任务 +1 金币,全部完成额外 +3 金币(每日最多 10 枚)',
+              Text(
+                '完成单个任务 +1 金币,全部完成额外 +3 金币(每日最多 10 枚)',
                 style: TextStyle(fontSize: 12, color: AppColors.textSub),
               ),
             ],
@@ -249,11 +356,11 @@ class _PlanPageState extends State<PlanPage> {
           ),
           onPressed: _addRandomTask,
           icon: const Icon(Icons.casino_rounded, size: 20),
-          label: const Text('🎲 随机任务'),
+          label: const Text('随机任务'),
         ),
         const SizedBox(height: 14),
         if (total == 0)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 30),
             child: Center(
               child: Text('今天还没有任务,点上方按钮添加吧~',
@@ -263,10 +370,10 @@ class _PlanPageState extends State<PlanPage> {
         else
           for (final task in _tasks) _taskTile(task),
         if (total > 0 && done == total)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 8),
             child: Center(
-              child: Text('🎉 今日任务全部完成!',
+              child: Text('今日任务全部完成!',
                   style: TextStyle(
                       color: AppColors.primaryDark,
                       fontWeight: FontWeight.w700)),
@@ -328,7 +435,7 @@ class _PlanPageState extends State<PlanPage> {
                       PriorityTag(priority: task.priority),
                       if (task.auto) ...[
                         const SizedBox(width: 6),
-                        const Text(
+                        Text(
                           '自动生成',
                           style: TextStyle(
                               fontSize: 10, color: AppColors.textSub),
@@ -340,10 +447,10 @@ class _PlanPageState extends State<PlanPage> {
               ),
             ),
             IconButton(
-              onPressed: () => _deleteTask(task),
-              icon: const Icon(Icons.delete_outline_rounded,
+              onPressed: () => _confirmDeleteOrReplace(task),
+              icon: Icon(Icons.delete_outline_rounded,
                   size: 20, color: AppColors.textSub),
-              tooltip: '删除任务',
+              tooltip: '删除 / 换一个',
             ),
           ],
         ),

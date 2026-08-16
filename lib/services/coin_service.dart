@@ -19,6 +19,19 @@ class CoinService {
 
   DbHelper get _db => DbHelper.instance;
 
+  /// 纯函数:在每日上限约束下,计算实际应发放的金币数。
+  /// [earned] 当日已赚,[amount] 本次拟发放。返回值 = min(amount, 剩余额度) 且不为负。
+  /// 抽出为静态纯函数便于单元测试(奖励发放的核心不变量)。
+  static int grantable({
+    required int earned,
+    required int amount,
+    int cap = dailyCap,
+  }) {
+    final remaining = cap - earned;
+    if (remaining <= 0 || amount <= 0) return 0;
+    return remaining < amount ? remaining : amount;
+  }
+
   Future<int> balance() async {
     final db = await _db.database;
     final v = Sqflite.firstIntValue(await db
@@ -54,16 +67,21 @@ class CoinService {
   }
 
   /// 完成任务奖励,受每日上限约束;返回实际获得金币数
+  /// 授予量不超过剩余额度,避免超额(如剩 0/1 枚时只发 0/1)
   Future<int> rewardTask(StudentTask task, String date) async {
-    if (await earnedToday(date) >= dailyCap) return 0;
-    await addRecord(
+    final grant = grantable(
+      earned: await earnedToday(date),
       amount: taskReward,
+    );
+    if (grant <= 0) return 0;
+    await addRecord(
+      amount: grant,
       reason: '完成今日任务:${task.title}',
       type: 'task',
       date: date,
       taskId: task.id,
     );
-    return taskReward;
+    return grant;
   }
 
   /// 当日全部任务完成奖励(每天仅一次),返回实际获得金币数
@@ -75,10 +93,10 @@ class CoinService {
         0;
     if (exists > 0) return 0;
 
-    final earned = await earnedToday(date);
-    final remaining = dailyCap - earned;
-    if (remaining <= 0) return 0;
-    final grant = remaining < bonusReward ? remaining : bonusReward;
+    final grant = grantable(
+      earned: await earnedToday(date),
+      amount: bonusReward,
+    );
     if (grant <= 0) return 0;
 
     await addRecord(
@@ -152,6 +170,55 @@ class CoinService {
     ));
     return v ?? 0;
   }
+
+  /// 当日某类型已获得金币(0 或正数;用于判断当日是否已打卡)
+  Future<int> earnedOfType(String date, String type) async {
+    final db = await _db.database;
+    final v = Sqflite.firstIntValue(await db.rawQuery(
+            'SELECT COALESCE(SUM(amount),0) FROM coin_records WHERE rec_date = ? AND type = ?',
+            [date, type])) ??
+        0;
+    return v;
+  }
+
+  /// 每日打卡奖励(英文/记账/运动/视频等),每天每类一次,受每日上限约束。
+  /// 授予量限制在剩余额度内:如已赚 9 枚、打卡 +2 时,只发 1 枚(不会超 10)。
+  Future<int> rewardDaily({
+    required String type,
+    required String reason,
+    required int amount,
+    required String date,
+  }) async {
+    final db = await _db.database;
+    final exists = Sqflite.firstIntValue(await db.rawQuery(
+            'SELECT COUNT(*) FROM coin_records WHERE rec_date = ? AND type = ?',
+            [date, type])) ??
+        0;
+    if (exists > 0) return 0;
+    final grant = grantable(
+      earned: await earnedToday(date),
+      amount: amount,
+    );
+    if (grant <= 0) return 0;
+    await addRecord(amount: grant, reason: reason, type: type, date: date);
+    return grant;
+  }
+
+  /// 英文学习打卡奖励(每日一次)
+  Future<int> rewardEnglish(String date) => rewardDaily(
+      type: 'english', reason: '英文学习打卡', amount: 2, date: date);
+
+  /// 记账打卡奖励(每日一次)
+  Future<int> rewardLedgerCheckin(String date) =>
+      rewardDaily(type: 'ledger', reason: '记账打卡', amount: 1, date: date);
+
+  /// 运动打卡奖励(每日一次)
+  Future<int> rewardWorkout(String date) =>
+      rewardDaily(type: 'workout', reason: '运动打卡', amount: 1, date: date);
+
+  /// 视频跟练打卡奖励(每日一次)
+  Future<int> rewardVideo(String date) =>
+      rewardDaily(type: 'video', reason: '视频跟练打卡', amount: 1, date: date);
 
   Future<List<CoinRecord>> records() async {
     final db = await _db.database;

@@ -127,9 +127,29 @@ class _AddTaskSheetState extends State<AddTaskSheet> {
             ],
           ),
           const SizedBox(height: 20),
-          FilledButton(
-            onPressed: _submit,
-            child: const Text('保存任务'),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                    foregroundColor: AppColors.textSub,
+                    side: BorderSide(color: AppColors.line),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('取消'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _submit,
+                  child: const Text('保存任务'),
+                ),
+              ),
+            ],
           ),
         ],
       ),

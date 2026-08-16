@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>灵感速记 · 历史记录检索(原型 v2.1)</title>
+<style>
+  :root{
+    --primary:#29B6F6; --primary-dark:#0288D1; --primary-light:#B3E5FC;
+    --bg:#F1F8FE; --card:#FFFFFF; --text:#1F2D3D; --sub:#7B8C9D; --line:#D6EAF9;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{
+    background:#DCEBF7; font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex;justify-content:center;min-height:100vh;color:var(--text);
+  }
+  .phone{
+    width:100%;max-width:420px;min-height:100vh;background:var(--bg);
+    display:flex;flex-direction:column;box-shadow:0 0 50px rgba(41,182,246,.18);position:relative;
+  }
+  /* 顶栏 */
+  .topbar{display:flex;align-items:center;gap:2px;padding:14px 8px 6px 8px;position:relative}
+  .back{background:none;border:none;font-size:24px;line-height:1;color:var(--text);padding:4px 10px;cursor:pointer;border-radius:10px}
+  .back:hover{background:var(--primary-light)}
+  .title{font-size:18px;font-weight:700;flex:1}
+  .count{font-size:12px;color:var(--sub);background:#fff;border:1px solid var(--line);border-radius:20px;padding:3px 10px;margin-right:6px}
+  .actions{position:relative}
+  .act{
+    background:none;border:none;color:var(--sub);width:40px;height:40px;border-radius:10px;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+  }
+  .act:hover{background:var(--primary-light);color:var(--primary-dark)}
+
+  /* 三点菜单 */
+  .menu{
+    position:absolute;right:4px;top:44px;background:#fff;border:1px solid var(--line);
+    border-radius:12px;box-shadow:0 6px 24px rgba(31,45,61,.14);padding:6px;min-width:140px;z-index:30;
+  }
+  .menu-item{
+    display:flex;align-items:center;gap:8px;width:100%;border:none;background:none;
+    padding:11px 14px;font-size:14px;color:var(--text);border-radius:8px;cursor:pointer;font-family:inherit;
+  }
+  .menu-item:hover{background:var(--bg)}
+  .menu-item svg{flex-shrink:0}
+  .menu-item.danger{color:#E53935}
+  .menu-item.danger:hover{background:#fdeaea}
+
+  /* 搜索区 */
+  .search-wrap{padding:8px 20px 4px}
+  .search{
+    display:flex;align-items:center;gap:8px;background:var(--card);
+    border:1px solid var(--line);border-radius:14px;padding:0 12px;height:44px;
+  }
+  .search:focus-within{border-color:var(--primary);box-shadow:0 0 0 2px rgba(41,182,246,.15)}
+  .search .icon{display:flex;color:var(--sub)}
+  .search input{flex:1;border:none;outline:none;font-size:15px;background:transparent;color:var(--text)}
+  .search input::placeholder{color:#A9BCCD}
+  .search .clear{background:none;border:none;color:var(--sub);font-size:15px;cursor:pointer;padding:4px;display:none}
+  .search .clear.show{display:block}
+
+  /* 快捷日期 + 更多 */
+  .filter-row{display:flex;align-items:center;gap:6px;padding:10px 20px 2px}
+  .chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;flex:1;min-width:0}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{
+    flex-shrink:0;border:1px solid var(--line);background:var(--card);color:var(--sub);
+    font-size:13px;border-radius:20px;padding:6px 14px;cursor:pointer;transition:all .15s;
+  }
+  .chip.on{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600}
+  .more-filter{
+    flex-shrink:0;border:1px solid var(--primary);background:#fff;color:var(--primary-dark);
+    font-size:13px;border-radius:20px;padding:6px 12px;cursor:pointer;font-family:inherit;
+  }
+  .more-filter:hover{background:var(--primary-light)}
+
+  /* 自定义日期(默认收起) */
+  .custom[hidden]{display:none}
+  .custom{display:flex;align-items:center;gap:6px;padding:8px 20px 2px;font-size:12px;color:var(--sub)}
+  .custom input[type=date]{
+    flex:1;border:1px solid var(--line);background:#fff;border-radius:10px;padding:7px 10px;
+    font-size:13px;color:var(--text);outline:none;font-family:inherit;
+  }
+  .custom input[type=date]:focus{border-color:var(--primary)}
+  .custom .apply{
+    border:none;background:var(--primary);color:#fff;border-radius:10px;padding:7px 14px;
+    font-size:13px;cursor:pointer;font-family:inherit;
+  }
+  .custom .apply:hover{background:var(--primary-dark)}
+
+  /* 列表 */
+  .list{flex:1;overflow-y:auto;padding:4px 20px 24px}
+  .note{
+    padding:13px 6px;border-bottom:1px solid var(--line);cursor:pointer;border-radius:8px;
+    transition:background .15s;animation:fadeIn .2s ease;
+  }
+  .note:hover{background:rgba(41,182,246,.06)}
+  .note:active{background:rgba(41,182,246,.12)}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+  .note .text{font-size:15px;line-height:1.55;word-break:break-word}
+  .note .time{font-size:11px;color:var(--sub);opacity:.75;margin-top:5px}
+
+  /* 空状态 */
+  .empty{text-align:center;padding:70px 30px;color:var(--sub)}
+  .empty .icon{display:flex;justify-content:center;margin-bottom:12px;opacity:.65}
+  .empty p{font-size:14px;line-height:1.6}
+  .empty .clear-btn{
+    margin-top:16px;border:1px solid var(--primary);background:#fff;color:var(--primary-dark);
+    border-radius:20px;padding:7px 18px;font-size:13px;cursor:pointer;font-family:inherit;
+  }
+
+  /* 详情视图 */
+  .hidden{display:none}
+  #detailView{position:absolute;inset:0;background:var(--bg);display:flex;flex-direction:column;z-index:10}
+  #detailView.hidden{display:none}
+  .detail-body{flex:1;overflow-y:auto;padding:18px 24px}
+  .detail-text{font-size:17px;line-height:1.7;word-break:break-word}
+  .detail-time{font-size:12px;color:var(--sub);margin-top:16px}
+
+  /* 删除确认 */
+  .mask{position:absolute;inset:0;background:rgba(31,45,61,.4);z-index:40;display:flex;align-items:flex-end}
+  .mask.hidden{display:none}
+  .sheet{background:#fff;width:100%;border-radius:20px 20px 0 0;padding:8px 20px 24px;animation:up .2s ease}
+  @keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+  .sheet .t{font-size:15px;font-weight:600;text-align:center;padding:14px 0}
+  .sheet .btn{
+    width:100%;border:none;border-radius:14px;padding:14px;font-size:15px;cursor:pointer;font-family:inherit;
+  }
+  .sheet .del-btn{background:#fdeaea;color:#E53935;font-weight:600;margin-top:4px}
+  .sheet .del-btn:hover{background:#fbdcdc}
+  .sheet .cancel-btn{background:var(--bg);color:var(--text);margin-top:10px}
+
+  /* 底部说明 */
+  .footnote{
+    border-top:1px solid var(--line);padding:10px 20px;font-size:11px;color:var(--sub);
+    background:#fff;text-align:center;
+  }
+  .toast{
+    position:fixed;left:50%;bottom:60px;transform:translateX(-50%);
+    background:#2B3A4D;color:#fff;font-size:13px;border-radius:12px;padding:10px 18px;
+    opacity:0;pointer-events:none;transition:opacity .25s;z-index:99;max-width:80%;
+  }
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="phone">
+  <!-- 列表视图 -->
+  <div id="listView" style="display:flex;flex-direction:column;flex:1;min-height:0">
+    <div class="topbar">
+      <button class="back" title="返回">‹</button>
+      <div class="title">灵感速记记录</div>
+      <span class="count" id="count"></span>
+    </div>
+
+    <div class="search-wrap">
+      <div class="search">
+        <span class="icon">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="#7B8C9D"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        </span>
+        <input id="kw" type="text" placeholder="搜索关键字…" autocomplete="off">
+        <button class="clear" id="clearKw">✕</button>
+      </div>
+    </div>
+
+    <div class="filter-row">
+      <div class="chips" id="chips">
+        <button class="chip on" data-range="all">全部</button>
+        <button class="chip" data-range="today">今天</button>
+        <button class="chip" data-range="yesterday">昨天</button>
+        <button class="chip" data-range="7d">近7天</button>
+        <button class="chip" data-range="30d">近30天</button>
+      </div>
+      <button class="more-filter" id="moreFilter">更多</button>
+    </div>
+
+    <div class="custom" id="customWrap" hidden>
+      <input type="date" id="from">
+      <span>至</span>
+      <input type="date" id="to">
+      <button class="apply" id="apply">筛选</button>
+    </div>
+    <div class="list" id="list"></div>
+  </div>
+
+  <!-- 详情视图 -->
+  <div id="detailView" class="hidden">
+    <div class="topbar">
+      <button class="back" onclick="closeDetail()">‹</button>
+      <div class="title">记录·Chronos</div>
+      <div class="actions">
+        <button class="act" title="更多" onclick="toggleMenu(event)">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+        </button>
+        <div class="menu hidden" id="menu">
+          <button class="menu-item" onclick="shareNote()">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>
+            分享
+          </button>
+          <button class="menu-item danger" onclick="askDelete()">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            删除
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="detail-body">
+      <div class="detail-text" id="detailText"></div>
+      <div class="detail-time" id="detailTime"></div>
+    </div>
+  </div>
+
+  <!-- 删除确认 -->
+  <div class="mask hidden" id="mask">
+    <div class="sheet">
+      <div class="t">删除这条记录?</div>
+      <button class="btn del-btn" onclick="confirmDelete()">删除</button>
+      <button class="btn cancel-btn" onclick="cancelDelete()">取消</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===== 示例数据(相对今天生成) ===== */
+const today0 = new Date(); today0.setHours(0,0,0,0);
+function d(n,h,m){const x=new Date(today0);x.setDate(x.getDate()-n);x.setHours(h,m,0,0);return x;}
+let notes = [
+  {content:'灵感:做一个「今日三件事」的极简打卡界面,不堆图标', t:d(0,9,12)},
+  {content:'看完 iCity 快速记录,动线要「打开就能写、记完就走」', t:d(0,14,45)},
+  {content:'错题本第3页:符号看错,下次先画数轴再下笔', t:d(1,20,5)},
+  {content:'晚上想试番茄牛腩,记得少放糖,冰箱里有牛腩', t:d(1,18,30)},
+  {content:'想到一个冷知识分享文案:为什么天空是蓝色的', t:d(2,11,8)},
+  {content:'把「每日英语一句」做成卡片收藏,单词长按可复制', t:d(3,16,22)},
+  {content:'情绪记录:今天有点焦虑,但写完任务清单好多了', t:d(4,21,40)},
+  {content:'阅读《原子习惯》第5章:环境设计比意志力靠谱', t:d(5,22,15)},
+  {content:'毕业设计灵感:用时间线展示学习成长轨迹', t:d(6,10,3)},
+  {content:'周末想去看展,朋友推荐了省美术馆的新展', t:d(9,13,50)},
+  {content:'记账分类想加一个「文具」,书签贴纸也归这里', t:d(12,19,27)},
+  {content:'工作复盘:汇报前先列三行结论,再补细节', t:d(20,15,33)},
+  {content:'跑步配速最近提不上去,试试间歇跑两周', t:d(33,7,55)},
+  {content:'小说开头草稿:雨停之后,她第一次抬头看了天空', t:d(45,23,18)},
+  {content:'想给爸妈换台好用的路由器,预算 300 内', t:d(60,12,9)},
+];
+
+/* ===== 工具 ===== */
+const $=id=>document.getElementById(id);
+const dateKey=x=>x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');
+function fullTime(x){
+  return x.getFullYear()+'年'+(x.getMonth()+1)+'月'+x.getDate()+'日 '+
+    String(x.getHours()).padStart(2,'0')+':'+String(x.getMinutes()).padStart(2,'0');
+}
+
+let range='all', fromVal='', toVal='', kw='';
+let current=null; // 当前详情对应的 note
+
+/* ===== 列表渲染 ===== */
+function render(){
+  const q=kw.trim().toLowerCase();
+  let list=notes.filter(n=>{
+    if(q && !n.content.toLowerCase().includes(q)) return false;
+    const key=dateKey(n.t);
+    if(range==='today'  && key!==dateKey(today0)) return false;
+    if(range==='yesterday'){
+      if(key!==dateKey(new Date(today0.getTime()-86400000))) return false;
+    }
+    if(range==='7d' && n.t < today0.getTime()-6*86400000) return false;
+    if(range==='30d'&& n.t < today0.getTime()-29*86400000) return false;
+    if(fromVal && key < fromVal) return false;
+    if(toVal   && key > toVal)   return false;
+    return true;
+  });
+  list.sort((a,b)=>b.t-a.t);
+
+  $('count').textContent=list.length+' 条';
+  const listEl=$('list');
+  listEl.innerHTML='';
+
+  if(list.length===0){
+    const hasFilter=q||range!=='all'||fromVal||toVal;
+    const icon = hasFilter
+      ? '<svg viewBox="0 0 24 24" width="40" height="40" fill="#A9BCCD"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>'
+      : '<svg viewBox="0 0 24 24" width="40" height="40" fill="#A9BCCD"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7zm2.85 11.1l-.85.6V16h-4v-2.3l-.85-.6C7.8 12.16 7 10.63 7 9c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.63-.8 3.16-2.15 4.1z"/></svg>';
+    listEl.innerHTML=
+      '<div class="empty"><div class="icon">'+icon+'</div>'+
+      '<p>'+ (hasFilter?'没有找到匹配的记录':'还没有灵感记录,快写一句吧~') +'</p>'+
+      (hasFilter?'<button class="clear-btn" onclick="resetAll()">清除筛选</button>':'')+
+      '</div>';
+    return;
+  }
+
+  for(const n of list){
+    const row=document.createElement('div');
+    row.className='note';
+    row.innerHTML='<div class="text"></div><div class="time"></div>';
+    row.querySelector('.text').textContent=n.content;
+    row.querySelector('.time').textContent=fullTime(n.t);
+    row.onclick=()=>openDetail(n);
+    listEl.appendChild(row);
+  }
+}
+
+/* ===== 详情 ===== */
+function openDetail(n){
+  current=n;
+  $('detailText').textContent=n.content;
+  $('detailTime').textContent=fullTime(n.t);
+  $('listView').style.display='none';
+  $('detailView').classList.remove('hidden');
+  closeMenu();
+}
+function closeDetail(){
+  closeMenu();
+  $('detailView').classList.add('hidden');
+  $('listView').style.display='flex';
+}
+function toggleMenu(e){
+  e.stopPropagation();
+  $('menu').classList.toggle('hidden');
+}
+function closeMenu(){ $('menu').classList.add('hidden'); }
+document.addEventListener('click',()=>closeMenu());
+function shareNote(){
+  closeMenu();
+  if(navigator.share){ navigator.share({title:'灵感速记', text:current.content}).catch(()=>{}); }
+  else toast('分享功能(原型演示)');
+}
+function askDelete(){ closeMenu(); $('mask').classList.remove('hidden'); }
+function cancelDelete(){ $('mask').classList.add('hidden'); }
+function confirmDelete(){
+  notes=notes.filter(x=>x!==current);
+  $('mask').classList.add('hidden');
+  closeDetail();
+  render();
+  toast('已删除');
+}
+
+/* ===== 交互 ===== */
+$('kw').addEventListener('input',e=>{ kw=e.target.value; $('clearKw').classList.toggle('show', !!kw); render(); });
+$('clearKw').onclick=()=>{ $('kw').value=''; kw=''; $('clearKw').classList.remove('show'); render(); $('kw').focus(); };
+document.querySelectorAll('#chips .chip').forEach(chip=>{
+  chip.onclick=()=>{
+    range=chip.dataset.range; fromVal=''; toVal=''; $('from').value=''; $('to').value='';
+    document.querySelectorAll('#chips .chip').forEach(c=>c.classList.toggle('on', c===chip));
+    render();
+  };
+});
+$('moreFilter').onclick=()=>{
+  const wrap=$('customWrap'), open=wrap.hidden;
+  wrap.hidden=!open;
+  $('moreFilter').textContent=open?'收起':'更多';
+};
+$('apply').onclick=()=>{
+  fromVal=$('from').value; toVal=$('to').value;
+  if(fromVal && toVal && fromVal>toVal){ toast('起始日期不能晚于结束日期'); return; }
+  range='all';
+  document.querySelectorAll('#chips .chip').forEach(c=>c.classList.toggle('on', c.dataset.range==='all'));
+  render();
+};
+function resetAll(){
+  range='all'; fromVal=''; toVal=''; kw='';
+  $('kw').value=''; $('clearKw').classList.remove('show'); $('from').value=''; $('to').value='';
+  document.querySelectorAll('#chips .chip').forEach(c=>c.classList.toggle('on', c.dataset.range==='all'));
+  render();
+}
+function toast(msg){
+  const t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),1600);
+}
+render();
+</script>
+</body>
+</html>

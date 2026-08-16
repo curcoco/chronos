@@ -1,5 +1,5 @@
 {
-  "version": "1.3.2",
-  "note": "下载失败时显示具体原因,便于排查;下载增加超时保护",
-  "apk": "https://chronos-update-1456265383.cos.ap-guangzhou.myqcloud.com/releases/chronos-1.3.2.apk"
+  "version": "1.6.3",
+  "note": "心愿支持删除(带确认);修复灵感速记发送键失效;深色模式适配侧边栏顶部;更新源迁移至 GitHub",
+  "apk": "https://github.com/curcoco/chronos/releases/download/v1.6.3/chronos-1.6.3.apk"
 }

@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../data/cities.dart';
 import '../data/daily_content.dart';
-import '../models/note.dart';
 import '../models/student_task.dart';
 import '../services/coin_service.dart';
 import '../services/note_service.dart';
 import '../services/settings_service.dart';
 import '../services/task_service.dart';
+import '../services/weather_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
+import '../widgets/frosted_snack.dart';
 import '../widgets/section_card.dart';
 import '../widgets/task_confirm_dialog.dart';
 import 'coin_center_page.dart';
@@ -30,11 +32,11 @@ class _HomePageState extends State<HomePage> {
 
   bool _loading = true;
   List<StudentTask> _tasks = [];
-  List<Note> _notes = [];
   int _coin = 0;
   int _todayEarned = 0;
-  String _greeting = '嗨,同学';
+  String _nickname = '';
   String _quote = '';
+  ({String city, String text, String temp})? _weather;
   String _dateLabel = '';
   String _week = '';
   ({String en, String zh}) _english = (en: '', zh: '');
@@ -60,22 +62,50 @@ class _HomePageState extends State<HomePage> {
       _taskService.todayTasks(date),
       CoinService.instance.balance(),
       CoinService.instance.earnedToday(date),
-      SettingsService.instance.greeting(),
-      _noteService.notes(),
+      SettingsService.instance.nickname(),
     ]);
     if (!mounted) return;
     setState(() {
       _tasks = results[0] as List<StudentTask>;
       _coin = results[1] as int;
       _todayEarned = results[2] as int;
-      _greeting = results[3] as String;
-      _notes = (results[4] as List<Note>).take(3).toList();
+      _nickname = results[3] as String;
       _quote = DailyContent.quoteFor(date);
       _english = DailyContent.englishFor(now);
       _dateLabel = monthDayLabel(now);
       _week = weekdayLabel(now);
       _loading = false;
     });
+    await _loadWeather();
+  }
+
+  /// 天气(心知天气;未配置或失败则隐藏)。
+  /// [forceRefresh] 为 true 时绕过缓存(切换城市后需要即时刷新)。
+  Future<void> _loadWeather({bool forceRefresh = false}) async {
+    if (!await WeatherService.instance.isConfigured()) return;
+    try {
+      final w = await WeatherService.instance.now(forceRefresh: forceRefresh);
+      if (!mounted) return;
+      setState(() => _weather = w);
+    } catch (_) {
+      // 天气失败不打扰用户
+    }
+  }
+
+  /// 点击天气条:选择城市(应用内可选)
+  Future<void> _pickCity() async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => const _CitySheet(),
+    );
+    if (picked == null || picked.isEmpty || !mounted) return;
+    await SettingsService.instance.setWeatherCity(picked);
+    await _loadWeather(forceRefresh: true);
+    _showSnack('已切换城市');
   }
 
   Future<void> _reload() async {
@@ -83,20 +113,18 @@ class _HomePageState extends State<HomePage> {
     final tasks = await _taskService.todayTasks(date);
     final coin = await CoinService.instance.balance();
     final earned = await CoinService.instance.earnedToday(date);
-    final notes = await _noteService.notes();
     if (!mounted) return;
     setState(() {
       _tasks = tasks;
       _coin = coin;
       _todayEarned = earned;
-      _notes = notes.take(3).toList();
     });
+    await _loadWeather();
   }
 
   void _showSnack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    showFrostedSnack(context, msg);
   }
 
   Future<void> _toggleTask(StudentTask task) async {
@@ -106,7 +134,7 @@ class _HomePageState extends State<HomePage> {
     await _reload();
     if (r.total != 0) {
       _showSnack(r.total > 0
-          ? '金币 +${r.total}${r.bonus > 0 ? '(含全部完成奖励 🎉)' : ''}'
+          ? '金币 +${r.total}${r.bonus > 0 ? '(含全部完成奖励)' : ''}'
           : '已收回金币 ${-r.total}');
     }
   }
@@ -120,7 +148,7 @@ class _HomePageState extends State<HomePage> {
     await _noteService.addNote(text);
     _noteCtrl.clear();
     await _reload();
-    _showSnack('已同步到灵感专区 ✨');
+    _showSnack('已同步到灵感专区');
   }
 
   Future<void> _openCoinCenter() async {
@@ -142,6 +170,10 @@ class _HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                 children: [
                   _buildHeader(),
+                  if (_weather != null) ...[
+                    const SizedBox(height: 12),
+                    _buildWeatherStrip(),
+                  ],
                   const SizedBox(height: 16),
                   _buildCoinCard(),
                   const SizedBox(height: 16),
@@ -166,16 +198,11 @@ class _HomePageState extends State<HomePage> {
             children: [
               Text(
                 '$_dateLabel $_week',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
                   color: AppColors.textMain,
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '$_greeting,今天也要加油哦!',
-                style: const TextStyle(fontSize: 14, color: AppColors.textSub),
               ),
               const SizedBox(height: 4),
               Text(
@@ -189,14 +216,63 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
         ),
-        // 侧边栏菜单入口(设置 / 版本更新等收纳在抽屉里)
-        IconButton(
-          onPressed: () => Scaffold.of(context).openDrawer(),
-          icon: const Icon(Icons.menu_rounded,
-              size: 24, color: AppColors.textSub),
-          tooltip: '菜单',
+        // 用户头像(点击开侧边栏;暂不支持自定义头像)
+        GestureDetector(
+          onTap: () => Scaffold.of(context).openDrawer(),
+          child: CircleAvatar(
+            radius: 19,
+            backgroundColor: AppColors.primaryLight,
+            child: Text(
+              _nickname.isEmpty ? '?' : _nickname.substring(0, 1),
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primaryDark,
+              ),
+            ),
+          ),
         ),
       ],
+    );
+  }
+
+  /// 天气条(点击选择城市;下拉刷新也会更新天气)
+  Widget _buildWeatherStrip() {
+    final w = _weather!;
+    return InkWell(
+      onTap: _pickCity,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.line),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.wb_sunny_rounded,
+                size: 18, color: Color(0xFFFFB300)),
+            const SizedBox(width: 8),
+            Text(w.city, style: const TextStyle(fontSize: 13)),
+            const SizedBox(width: 10),
+            Text(w.text,
+                style:
+                    TextStyle(fontSize: 13, color: AppColors.textSub)),
+            const Spacer(),
+            Text(
+              '${w.temp}℃',
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primaryDark),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.keyboard_arrow_down_rounded,
+                size: 18, color: AppColors.textSub),
+          ],
+        ),
+      ),
     );
   }
 
@@ -207,7 +283,7 @@ class _HomePageState extends State<HomePage> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [AppColors.primaryLight, AppColors.primary],
@@ -289,7 +365,7 @@ class _HomePageState extends State<HomePage> {
       title: '今日任务',
       trailing: TextButton(
         onPressed: widget.onGoPlan,
-        child: const Text('查看全部 ›',
+        child: Text('查看全部 ›',
             style: TextStyle(fontSize: 13, color: AppColors.primaryDark)),
       ),
       child: Column(
@@ -305,7 +381,7 @@ class _HomePageState extends State<HomePage> {
               const Spacer(),
               Text(
                 '${(progress * 100).round()}%',
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                     color: AppColors.primaryDark),
@@ -318,13 +394,13 @@ class _HomePageState extends State<HomePage> {
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 8,
-              backgroundColor: const Color(0xFFE3F0FA),
+              backgroundColor: AppColors.line,
               color: AppColors.primary,
             ),
           ),
           const SizedBox(height: 12),
           if (total == 0)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
               child: Text('今天还没有任务,去计划中心添加吧~',
                   style: TextStyle(color: AppColors.textSub)),
@@ -332,9 +408,9 @@ class _HomePageState extends State<HomePage> {
           else ...[
             for (final task in _tasks) _taskTile(task),
             if (done == total)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(top: 6),
-                child: Text('🎉 今日任务全部完成,太棒了!',
+                child: Text('今日任务全部完成,太棒了!',
                     style: TextStyle(
                         color: AppColors.primaryDark,
                         fontWeight: FontWeight.w600)),
@@ -396,64 +472,33 @@ class _HomePageState extends State<HomePage> {
   Widget _buildNoteCard() {
     return SectionCard(
       title: '灵感速记',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          TextField(
-            controller: _noteCtrl,
-            maxLength: 80,
-            decoration: const InputDecoration(
-              hintText: '记下一句话灵感…',
-              counterText: '',
+          Expanded(
+            child: TextField(
+              controller: _noteCtrl,
+              maxLength: 80,
+              decoration: const InputDecoration(
+                hintText: '记下一句话灵感…',
+                counterText: '',
+              ),
             ),
           ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerRight,
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 52,
+            height: 46,
             child: FilledButton(
               style: FilledButton.styleFrom(
-                minimumSize: const Size(120, 42),
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(52, 46),
+                shape: const CircleBorder(),
               ),
               onPressed: _saveNote,
-              child: const Text('保存'),
+              child: const Icon(Icons.send_rounded, size: 20),
             ),
           ),
-          if (_notes.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            const Text(
-              '✨ 灵感专区',
-              style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSub),
-            ),
-            const SizedBox(height: 4),
-            for (final note in _notes)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    const Icon(Icons.lightbulb_outline_rounded,
-                        size: 18, color: Color(0xFFFFB300)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        note.content,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 14),
-                      ),
-                    ),
-                    Text(
-                      timeLabel(note.createdAt),
-                      style: const TextStyle(
-                          fontSize: 11, color: AppColors.textSub),
-                    ),
-                  ],
-                ),
-              ),
-          ],
         ],
       ),
     );
@@ -461,7 +506,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildEnglishCard() {
     return SectionCard(
-      title: '📖 每日英语一句',
+      title: '每日英语一句',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -476,7 +521,92 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 6),
           Text(
             _english.zh,
-            style: const TextStyle(fontSize: 13, color: AppColors.textSub),
+            style: TextStyle(fontSize: 13, color: AppColors.textSub),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 天气城市选择弹层:常用城市 + 自定义拼音输入
+class _CitySheet extends StatefulWidget {
+  const _CitySheet();
+
+  @override
+  State<_CitySheet> createState() => _CitySheetState();
+}
+
+class _CitySheetState extends State<_CitySheet> {
+  final TextEditingController _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Center(
+            child: Text(
+              '选择城市',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final c in commonCities)
+                InkWell(
+                  onTap: () => Navigator.of(context).pop(c.pinyin),
+                  borderRadius: BorderRadius.circular(18),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 13, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: AppColors.line),
+                    ),
+                    child: Text(c.name,
+                        style: const TextStyle(fontSize: 13)),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '或输入城市拼音(心知天气支持,如 hangzhou)',
+            style: TextStyle(fontSize: 12, color: AppColors.textSub),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _ctrl,
+                  decoration: const InputDecoration(
+                    hintText: '城市拼音',
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: () =>
+                    Navigator.of(context).pop(_ctrl.text.trim()),
+                child: const Text('确定'),
+              ),
+            ],
           ),
         ],
       ),

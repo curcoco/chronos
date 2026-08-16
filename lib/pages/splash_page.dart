@@ -16,7 +16,7 @@ class SplashPage extends StatefulWidget {
 }
 
 class _SplashPageState extends State<SplashPage> {
-  String _greeting = '嗨,同学';
+  String _greetingText = '';
   String _quote = '';
   String _dateLabel = '';
   String _week = '';
@@ -30,44 +30,17 @@ class _SplashPageState extends State<SplashPage> {
   Future<void> _init() async {
     final now = DateTime.now();
     final date = todayStr();
-    final greeting = await SettingsService.instance.greeting();
+    final nickname = await SettingsService.instance.nickname();
+    final isSet = await SettingsService.instance.isNicknameSet();
     if (!mounted) return;
     setState(() {
-      _greeting = greeting;
+      // 只有用户主动设定昵称才显示;否则显示「今天想做点什么?」
+      _greetingText =
+          isSet ? '$nickname,今天也请多指教' : '今天想做点什么?';
       _quote = DailyContent.quoteFor(date);
       _dateLabel = monthDayLabel(now);
       _week = weekdayLabel(now);
     });
-  }
-
-  Future<void> _editGreeting() async {
-    final controller = TextEditingController(text: _greeting);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('修改问候语'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 12,
-          decoration: const InputDecoration(hintText: '输入你想看到的问候语'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-    );
-    if (result == null || result.isEmpty || !mounted) return;
-    await SettingsService.instance.setGreeting(result);
-    if (!mounted) return;
-    setState(() => _greeting = result);
   }
 
   @override
@@ -92,7 +65,7 @@ class _SplashPageState extends State<SplashPage> {
                   width: 92,
                   height: 92,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
+                    gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [AppColors.primaryLight, AppColors.primary],
@@ -113,7 +86,7 @@ class _SplashPageState extends State<SplashPage> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                const Text(
+                Text(
                   'Chronos',
                   style: TextStyle(
                     fontSize: 20,
@@ -124,7 +97,7 @@ class _SplashPageState extends State<SplashPage> {
                 const Spacer(flex: 2),
                 Text(
                   _dateLabel,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 36,
                     fontWeight: FontWeight.w800,
                     color: AppColors.textMain,
@@ -133,41 +106,35 @@ class _SplashPageState extends State<SplashPage> {
                 const SizedBox(height: 6),
                 Text(
                   _week,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 17,
                     color: AppColors.textSub,
                   ),
                 ),
                 const SizedBox(height: 30),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      _greeting,
-                      style: const TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textMain,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      onPressed: _editGreeting,
-                      icon: const Icon(
-                        Icons.edit_rounded,
-                        size: 20,
-                        color: AppColors.textSub,
-                      ),
-                      tooltip: '自定义问候语',
-                    ),
-                  ],
+                // 分层问候:时段词(大) + 昵称/引导(小) + 金句
+                Text(
+                  timeGreeting(DateTime.now()),
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textMain,
+                  ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
+                Text(
+                  _greetingText,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: AppColors.textSub,
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Text(
                   '「$_quote」',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 15,
+                  style: TextStyle(
+                    fontSize: 14,
                     fontStyle: FontStyle.italic,
                     color: AppColors.textSub,
                     height: 1.5,

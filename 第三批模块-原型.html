@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chronos · 第三批模块原型</title>
+<style>
+  :root{
+    --primary:#29B6F6; --primary-dark:#0288D1; --primary-light:#B3E5FC;
+    --bg:#F1F8FE; --card:#FFFFFF; --text:#1F2D3D; --sub:#7B8C9D; --line:#D6EAF9;
+    --red:#E53935; --green:#2E7D32; --amber:#F9A825; --orange:#E65100;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{background:#DCEBF7;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;display:flex;justify-content:center;min-height:100vh;color:var(--text)}
+  .phone{width:100%;max-width:420px;min-height:100vh;background:var(--bg);display:flex;flex-direction:column;box-shadow:0 0 50px rgba(41,182,246,.18);position:relative}
+  .topbar{display:flex;align-items:center;gap:2px;padding:14px 8px 6px 8px}
+  .back{background:none;border:none;font-size:24px;line-height:1;color:var(--text);padding:4px 10px;cursor:pointer;border-radius:10px}
+  .back:hover{background:var(--primary-light)}
+  .title{font-size:18px;font-weight:700;flex:1}
+  .sub{font-size:12px;color:var(--sub);margin-right:10px}
+  .page{flex:1;overflow-y:auto;display:none;flex-direction:column}
+  .page.active{display:flex}
+  .pad{padding:12px 20px 24px}
+  .hero-title{font-size:20px;font-weight:800;padding:16px 20px 4px}
+  .hero-sub{font-size:12px;color:var(--sub);padding:0 20px 8px}
+  .tabbar{display:flex;background:#fff;border-top:1px solid var(--line)}
+  .tab{flex:1;background:none;border:none;padding:8px 0 10px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;color:var(--sub);font-family:inherit}
+  .tab.on{color:var(--primary-dark)}
+  .tab .lb{font-size:10px}
+  .tab .tag{font-size:8px;color:var(--sub);line-height:1}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+  .card h3{font-size:14px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .card h3 .tip{font-size:11px;font-weight:400;color:var(--sub);margin-left:auto}
+  .muted{color:var(--sub);font-size:12px}
+  .small{font-size:11px;color:var(--sub)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:none;border-radius:14px;padding:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit}
+  .btn.primary{background:var(--primary);color:#fff;width:100%}
+  .btn.primary:hover{background:var(--primary-dark)}
+  .btn.ghost{background:#fff;color:var(--primary-dark);border:1px solid var(--primary);width:100%}
+  .btn.sm{width:auto;padding:7px 14px;font-size:13px;border-radius:10px}
+  input[type=text],input[type=number],input[type=date],textarea,select{width:100%;border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 12px;font-size:14px;color:var(--text);outline:none;font-family:inherit}
+  input:focus,textarea:focus,select:focus{border-color:var(--primary);box-shadow:0 0 0 2px rgba(41,182,246,.15)}
+  textarea{resize:none}
+  .field{margin-bottom:10px}
+  .field label{display:block;font-size:12px;color:var(--sub);margin-bottom:5px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{border:1px solid var(--line);background:#fff;color:var(--sub);font-size:13px;border-radius:18px;padding:6px 13px;cursor:pointer}
+  .chip.on{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600}
+  .li{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .li:last-child{border-bottom:none}
+  .li .main{flex:1;min-width:0}
+  .li .t{font-size:14px;line-height:1.5}
+  .li .d{font-size:11px;color:var(--sub);margin-top:3px}
+  .li .r{font-size:13px;font-weight:600;color:var(--sub);text-align:right}
+  .icon-btn{background:none;border:none;color:var(--sub);width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .icon-btn:hover{background:var(--bg)}
+  .seg{display:flex;background:#fff;border:1px solid var(--line);border-radius:12px;padding:3px;margin-bottom:12px}
+  .seg button{flex:1;border:none;background:none;padding:8px 2px;font-size:12px;color:var(--sub);border-radius:9px;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .seg button.on{background:var(--primary);color:#fff;font-weight:600}
+  .bar{height:8px;background:#E3F0FA;border-radius:5px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--primary);border-radius:5px}
+  .empty{text-align:center;padding:50px 30px;color:var(--sub);font-size:13px}
+  .stripe{background:var(--primary-light);color:var(--primary-dark);border-radius:10px;padding:9px 12px;font-size:12px;font-weight:600;margin-bottom:12px}
+  .mask{position:absolute;inset:0;background:rgba(31,45,61,.4);z-index:50;display:flex;align-items:flex-end}
+  .mask.hidden{display:none}
+  .sheet{background:#fff;width:100%;border-radius:20px 20px 0 0;padding:16px 20px 24px;max-height:85%;overflow-y:auto;animation:up .2s ease}
+  @keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+  .sheet h2{font-size:16px;font-weight:700;text-align:center;margin-bottom:14px}
+  .home-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 20px}
+  .mod{border:none;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 14px;display:flex;flex-direction:column;align-items:flex-start;gap:10px;cursor:pointer;font-family:inherit;text-align:left}
+  .mod:hover{border-color:var(--primary);box-shadow:0 4px 14px rgba(41,182,246,.15)}
+  .mod .ic{width:42px;height:42px;border-radius:12px;background:var(--primary-light);display:flex;align-items:center;justify-content:center;color:var(--primary-dark)}
+  .mod .nm{font-size:15px;font-weight:700;color:var(--text)}
+  .mod .ds{font-size:11px;color:var(--sub);line-height:1.4}
+  .mod.off{opacity:.65}
+  .mod.off .ic{background:#E8EEF4;color:var(--sub)}
+  /* 健康指标卡 */
+  .metrics{display:flex;gap:10px}
+  .metric{flex:1;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;text-align:center}
+  .metric .v{font-size:22px;font-weight:800;color:var(--primary-dark)}
+  .metric .l{font-size:11px;color:var(--sub);margin-top:2px}
+  /* 食谱 */
+  .meal{display:flex;gap:8px;margin-bottom:8px;align-items:center}
+  .meal .tag{flex-shrink:0;width:44px;font-size:11px;font-weight:600;color:var(--primary-dark);background:var(--primary-light);border-radius:8px;padding:4px 0;text-align:center}
+  .meal .it{flex:1;font-size:13px}
+  .meal .it .kcal{font-size:10px;color:var(--sub)}
+  .meal .cost{font-size:12px;color:var(--sub);flex-shrink:0}
+  .over-tip{background:#FFF3E0;color:var(--orange);border-radius:10px;padding:9px 12px;font-size:12px;font-weight:600;margin-bottom:10px}
+  /* 计时器 */
+  .timer-box{background:linear-gradient(135deg,var(--primary-light),var(--primary));border-radius:18px;padding:22px;text-align:center;color:#fff;margin-bottom:12px}
+  .timer-box .tt{font-size:46px;font-weight:800;font-variant-numeric:tabular-nums}
+  .timer-box .btns{display:flex;gap:10px;justify-content:center;margin-top:12px}
+  .timer-box .btn{background:rgba(255,255,255,.9);color:var(--primary-dark);width:auto;padding:9px 20px;font-size:14px}
+  /* 热力图 */
+  .heat{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .heat .wk{text-align:center;font-size:9px;color:var(--sub);padding:4px 0}
+  .heat .day{aspect-ratio:1;border-radius:5px;background:#E9F0F7;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text)}
+  .heat .day.l1{background:#B3E5FC}
+  .heat .day.l2{background:#4FC3F7}
+  .heat .day.l3{background:#29B6F6;color:#fff}
+  .heat .day.l4{background:#0288D1;color:#fff}
+  .heat .day.blank{visibility:hidden}
+  .legend{display:flex;align-items:center;gap:5px;margin-top:8px;font-size:10px;color:var(--sub)}
+  .legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+  .toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);background:#2B3A4D;color:#fff;font-size:13px;border-radius:12px;padding:10px 18px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:99;max-width:80%}
+  .toast.show{opacity:1}
+  .mood{font-size:11px;border-radius:10px;padding:3px 8px}
+  .mood.happy{background:#E8F5E9;color:#2E7D32}
+  .mood.calm{background:#E3F0FA;color:#0288D1}
+  .mood.sad{background:#F3E5F5;color:#7B1FA2}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="topbar">
+    <button class="back" id="backBtn" onclick="goHome()" style="visibility:hidden">‹</button>
+    <div class="title" id="pageTitle">Chronos</div>
+    <span class="sub" id="pageSub"></span>
+  </div>
+
+  <!-- ===== 首页 ===== -->
+  <div class="page active" id="page-home">
+    <div class="hero-title">Chronos</div>
+    <div class="hero-sub">第三批模块 · 纯本地 · 原型展示</div>
+    <div class="home-grid">
+      <button class="mod" onclick="show('health')"><span class="ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></span><span class="nm">健康管理</span><span class="ds">食谱 / 运动 / 热力图</span></button>
+      <button class="mod" onclick="show('essay')"><span class="ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></span><span class="nm">写随笔</span><span class="ds">自由书写 · 心情标记</span></button>
+      <button class="mod off"><span class="ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg></span><span class="nm">零时闲话铺</span><span class="ds">待接入 AI(需中转站 API + elevenlabs 额度)</span></button>
+    </div>
+  </div>
+
+  <!-- ===== 健康管理 ===== -->
+  <div class="page" id="page-health">
+    <div class="pad">
+      <div class="seg" id="hlSeg">
+        <button class="on" onclick="hlTab(0)">厨房秘籍</button>
+        <button onclick="hlTab(1)">智能食谱</button>
+        <button onclick="hlTab(2)">运动记录</button>
+        <button onclick="hlTab(3)">视频跟练</button>
+        <button onclick="hlTab(4)">运动日历</button>
+      </div>
+
+      <!-- 厨房秘籍 -->
+      <div id="hlKitchen">
+        <div class="stripe">分类收纳菜品 / 食材 / 调料 / 教程,含卡路里与价格</div>
+        <div class="chips" id="kcChips" style="margin-bottom:10px"></div>
+        <button class="btn ghost" onclick="openKitchen()">添加条目</button>
+        <div style="height:12px"></div>
+        <div id="kcList"></div>
+      </div>
+
+      <!-- 智能食谱 -->
+      <div id="hlPlan" style="display:none">
+        <div class="card">
+          <h3>身体数据</h3>
+          <div class="field"><label>身高(cm)</label><input type="number" id="bpHeight" placeholder="如 170"></div>
+          <div class="field"><label>体重(kg)</label><input type="number" id="bpWeight" placeholder="如 60"></div>
+          <div class="field"><label>年龄</label><input type="number" id="bpAge" placeholder="如 18"></div>
+          <div class="field"><label>性别</label>
+            <select id="bpSex"><option value="m">男</option><option value="f">女</option></select>
+          </div>
+          <div class="field"><label>活动量</label>
+            <select id="bpAct"><option value="1.2">久坐(几乎不运动)</option><option value="1.375">轻度(每周1-3次)</option><option value="1.55">中度(每周3-5次)</option><option value="1.725">高强度(每周6-7次)</option></select>
+          </div>
+          <button class="btn primary" onclick="calcBody()">计算 BMI / TDEE</button>
+        </div>
+        <div class="metrics" id="bpMetrics" style="display:none"></div>
+        <div class="card" style="margin-top:12px">
+          <h3>3 天食谱<span class="tip">按预算生成</span></h3>
+          <div class="field"><label>每日预算(元)</label><input type="number" id="bpBudget" placeholder="如 30"></div>
+          <button class="btn primary" onclick="genMeals()">生成 3 天食谱</button>
+          <div style="height:12px"></div>
+          <div id="bpMeals"></div>
+        </div>
+      </div>
+
+      <!-- 运动记录 -->
+      <div id="hlWorkout" style="display:none">
+        <div class="stripe">记录运动,完成打卡领金币(+1 / 次)</div>
+        <button class="btn ghost" onclick="openWorkout()">添加运动</button>
+        <div style="height:12px"></div>
+        <div id="wkList"></div>
+      </div>
+
+      <!-- 视频跟练 -->
+      <div id="hlVideo" style="display:none">
+        <div class="stripe">跟练视频 + 内置计时器</div>
+        <div class="timer-box">
+          <div class="tt" id="tmrDisplay">00:00</div>
+          <div class="btns">
+            <button class="btn" onclick="tmrToggle()" id="tmrBtn">开始</button>
+            <button class="btn" onclick="tmrReset()">重置</button>
+            <button class="btn" onclick="tmrCheckin()">打卡完成</button>
+          </div>
+        </div>
+        <div id="vdList"></div>
+      </div>
+
+      <!-- 运动日历 -->
+      <div id="hlHeat" style="display:none">
+        <div class="stripe">本月运动热力图 · <span id="hmMonth"></span></div>
+        <div class="card">
+          <div class="heat" id="hmGrid"></div>
+          <div class="legend"><span>少</span><i style="background:#E9F0F7"></i><i style="background:#B3E5FC"></i><i style="background:#4FC3F7"></i><i style="background:#29B6F6"></i><i style="background:#0288D1"></i><span>多</span></div>
+        </div>
+        <div class="card"><h3>本月统计</h3><div class="metrics" id="hmStats"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 写随笔 ===== -->
+  <div class="page" id="page-essay">
+    <div class="pad">
+      <button class="btn primary" onclick="openEssay()">新建随笔</button>
+      <div style="height:12px"></div>
+      <div id="esList"></div>
+    </div>
+  </div>
+
+  <!-- ===== 弹层:厨房条目 ===== -->
+  <div class="mask hidden" id="kcMask">
+    <div class="sheet">
+      <h2>添加条目</h2>
+      <div class="field"><label>名称</label><input type="text" id="kcName" placeholder="如 番茄炒蛋"></div>
+      <div class="field"><label>分类</label><div class="chips" id="kcCatChips"></div></div>
+      <div class="field"><label>卡路里(kcal/份)</label><input type="number" id="kcCal" placeholder="如 180"></div>
+      <div class="field"><label>价格(元)</label><input type="number" id="kcPrice" placeholder="如 8"></div>
+      <div class="field"><label>教程视频链接(选填)</label><input type="text" id="kcLink" placeholder="https://…"></div>
+      <button class="btn primary" onclick="saveKitchen()">保存</button>
+      <div style="height:8px"></div>
+      <button class="btn ghost" onclick="closeMask('kc')">取消</button>
+    </div>
+  </div>
+
+  <!-- ===== 弹层:运动 ===== -->
+  <div class="mask hidden" id="wkMask">
+    <div class="sheet">
+      <h2>添加运动</h2>
+      <div class="field"><label>类型</label><div class="chips" id="wkTypeChips"></div></div>
+      <div class="field"><label>时长(分钟)</label><input type="number" id="wkMin" placeholder="如 30"></div>
+      <div class="field"><label>日期</label><input type="date" id="wkDate"></div>
+      <button class="btn primary" onclick="saveWorkout()">保存</button>
+      <div style="height:8px"></div>
+      <button class="btn ghost" onclick="closeMask('wk')">取消</button>
+    </div>
+  </div>
+
+  <!-- ===== 弹层:随笔 ===== -->
+  <div class="mask hidden" id="esMask">
+    <div class="sheet">
+      <h2 id="esTitle">新建随笔</h2>
+      <div class="field"><label>标题</label><input type="text" id="esName" placeholder="随笔标题"></div>
+      <div class="field"><label>心情</label><div class="chips" id="esMoodChips"></div></div>
+      <div class="field"><label>正文</label><textarea id="esBody" rows="5" placeholder="写点什么…"></textarea></div>
+      <button class="btn primary" onclick="saveEssay()">保存</button>
+      <div style="height:8px"></div>
+      <button class="btn ghost" onclick="closeMask('es')">取消</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ 工具 ============ */
+const $=id=>document.getElementById(id);
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1600);}
+const today0=new Date();today0.setHours(0,0,0,0);
+function dstr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function daysAgo(n){const x=new Date(today0);x.setDate(x.getDate()-n);return x;}
+const money=n=>'¥'+(Number(n)||0).toFixed(2);
+function openMask(k){$(k+'Mask').classList.remove('hidden');}
+function closeMask(k){$(k+'Mask').classList.add('hidden');}
+
+/* ============ 页面切换 ============ */
+let currentPage='home';
+function show(id){
+  currentPage=id;
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+id));
+  $('backBtn').style.visibility=(id==='home')?'hidden':'visible';
+  const titles={home:'Chronos',health:'健康管理',essay:'写随笔'};
+  $('pageTitle').textContent=titles[id]||'Chronos';
+  $('pageSub').textContent=id==='home'?'第三批模块 · 纯本地':'';
+  if(id==='health')renderKitchen();
+  if(id==='essay')renderEssays();
+}
+function goHome(){show('home');}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>show(t.dataset.m));
+
+/* ============ 健康:厨房秘籍 ============ */
+const kcCats=['菜品','食材','调料','教程'];
+let kitchens=[
+  {cat:'菜品',name:'番茄炒蛋',cal:180,price:8,link:'https://example.com/v1'},
+  {cat:'菜品',name:'清炒西兰花',cal:120,price:6,link:''},
+  {cat:'食材',name:'鸡胸肉(100g)',cal:165,price:5,link:''},
+  {cat:'调料',name:'橄榄油(10g)',cal:90,price:2,link:''},
+  {cat:'教程',name:'5 分钟快手早餐',cal:0,price:0,link:'https://example.com/v2'},
+];
+let kcCat='菜品';
+function renderKitchen(){
+  const list=kitchens.filter(k=>k.cat===kcCat);
+  $('kcChips').innerHTML=kcCats.map(c=>'<button class="chip'+(c===kcCat?' on':'')+'" onclick="pickKcCat(this,\''+c+'\')">'+c+'</button>').join('');
+  $('kcList').innerHTML=list.length?list.map((k,i)=>'<div class="li"><div class="main"><div class="t">'+k.name+'</div><div class="d">'+(k.cal>0?'约 '+k.cal+' kcal':'无卡路里')+(k.link?' · <span style="color:var(--primary-dark)">视频链接</span>':'')+'</div></div><div class="r">'+money(k.price)+'</div><button class="icon-btn" onclick="delKitchen('+i+')">×</button></div>').join(''):'<div class="empty">这个分类还没有内容</div>';
+  $('kcCatChips').innerHTML=kcCats.map(c=>'<button class="chip'+(c==='菜品'?' on':'')+'" onclick="pickKcCat2(this,\''+c+'\')">'+c+'</button>').join('');
+}
+function pickKcCat(el,c){kcCat=c;renderKitchen();}
+function pickKcCat2(el,c){document.querySelectorAll('#kcCatChips .chip').forEach(x=>x.classList.toggle('on',x===el));}
+function openKitchen(){openMask('kc');$('kcName').value='';$('kcCal').value='';$('kcPrice').value='';$('kcLink').value='';}
+function saveKitchen(){
+  const name=$('kcName').value.trim();
+  if(!name){toast('请输入名称');return;}
+  const catEl=document.querySelector('#kcCatChips .chip.on');
+  kitchens.push({cat:catEl?catEl.textContent:'菜品',name,cal:+$('kcCal').value||0,price:+$('kcPrice').value||0,link:$('kcLink').value.trim()});
+  closeMask('kc');renderKitchen();toast('已添加');
+}
+function delKitchen(i){const n=kitchens.filter(k=>k.cat===kcCat)[i];kitchens=kitchens.filter(k=>k!==n);renderKitchen();toast('已删除');}
+
+/* ============ 健康:智能食谱 ============ */
+function calcBody(){
+  const h=+$('bpHeight').value,w=+$('bpWeight').value,a=+$('bpAge').value;
+  if(!h||!w||!a){toast('请完整填写身体数据');return;}
+  const hm=h/100;
+  const bmi=w/(hm*hm);
+  const bmr=10*w+6.25*h-5*a+($('bpSex').value==='m'?5:-161);
+  const tdee=Math.round(bmr*+$('bpAct').value);
+  $('bpMetrics').style.display='flex';
+  $('bpMetrics').innerHTML='<div class="metric"><div class="v">'+bmi.toFixed(1)+'</div><div class="l">BMI'+(bmi<18.5?'偏瘦':bmi<24?'正常':bmi<28?'偏胖':'肥胖')+'</div></div><div class="metric"><div class="v">'+tdee+'</div><div class="l">TDEE(kcal/天)</div></div>';
+  $('bpMetrics').dataset.tdee=tdee;
+  toast('已计算 BMI 与 TDEE');
+}
+const mealPool=[
+  {name:'番茄炒蛋',kcal:180,cost:8},{name:'清炒西兰花',kcal:120,cost:6},{name:'米饭(150g)',kcal:170,cost:1.5},
+  {name:'水煮蛋(2个)',kcal:150,cost:2},{name:'牛奶(250ml)',kcal:135,cost:3},{name:'燕麦粥',kcal:180,cost:2},
+  {name:'鸡胸肉沙拉',kcal:280,cost:10},{name:'紫薯(1个)',kcal:110,cost:3},{name:'苹果(1个)',kcal:95,cost:2.5},
+  {name:'全麦面包(2片)',kcal:160,cost:3},{name:'香蕉(1根)',kcal:90,cost:1.5},{name:'酸奶(1杯)',kcal:120,cost:4},
+];
+const tags=['早餐','午餐','晚餐','加餐'];
+function genMeals(){
+  const budget=+$('bpBudget').value;
+  if(!budget){toast('请输入每日预算');return;}
+  const tdee=+($('bpMetrics').dataset.tdee||0);
+  let html='';
+  for(let d=1;d<=3;d++){
+    let dayCost=0,dayKcal=0;
+    const meals=tags.map(tag=>{
+      const it=mealPool[Math.floor(Math.random()*mealPool.length)];
+      dayCost+=it.cost;dayKcal+=it.kcal;
+      return '<div class="meal"><span class="tag">'+tag+'</span><span class="it">'+it.name+'<span class="kcal"> · '+it.kcal+' kcal</span></span><span class="cost">'+money(it.cost)+'</span></div>';
+    }).join('');
+    const over=dayCost>budget;
+    html+='<div class="card"><h3>第 '+d+' 天'+(over?' <span style="color:var(--red)">超预算!</span>':'')+'</h3>'+meals+'<div class="small" style="text-align:right">合计 '+dayKcal+' kcal · '+money(dayCost)+(tdee?' / 建议 '+tdee+' kcal':'')+'</div></div>';
+  }
+  $('bpMeals').innerHTML=html;
+  toast('已生成 3 天食谱');
+}
+
+/* ============ 健康:运动记录 ============ */
+const wkTypes=['跑步','散步','跳绳','瑜伽','骑行','力量'];
+let workouts=[];
+(function(){workouts.push({type:'跑步',min:30,date:dstr(daysAgo(0))},{type:'跳绳',min:15,date:dstr(daysAgo(1))},{type:'瑜伽',min:40,date:dstr(daysAgo(2))},{type:'散步',min:25,date:dstr(daysAgo(4))});})();
+let wkType='跑步';
+function openWorkout(){
+  openMask('wk');
+  $('wkTypeChips').innerHTML=wkTypes.map((t,i)=>'<button class="chip'+(i===0?' on':'')+'" data-t="'+t+'" onclick="pickWkType(this)">'+t+'</button>').join('');
+  $('wkMin').value='';$('wkDate').value=dstr(today0);
+}
+function pickWkType(el){document.querySelectorAll('#wkTypeChips .chip').forEach(x=>x.classList.toggle('on',x===el));}
+function renderWorkouts(){
+  const list=workouts.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const groups={};list.forEach(w=>{(groups[w.date]=groups[w.date]||[]).push(w);});
+  $('wkList').innerHTML=Object.entries(groups).map(([d,arr])=>'<div class="small" style="margin:8px 0 2px;font-weight:600">'+d+'</div>'+arr.map(w=>'<div class="li"><div class="main"><div class="t">'+w.type+'</div><div class="d">'+w.min+' 分钟</div></div><button class="btn sm primary" onclick="wkCheckin(\''+w.type+'·'+w.min+'\')">打卡 +1</button></div>').join('')).join('')||'<div class="empty">还没有运动记录</div>';
+}
+function saveWorkout(){
+  const min=+$('wkMin').value;
+  if(!(min>0)){toast('请输入时长');return;}
+  const catEl=document.querySelector('#wkTypeChips .chip.on');
+  workouts.push({type:catEl?catEl.textContent:'跑步',min,date:$('wkDate').value||dstr(today0)});
+  closeMask('wk');renderWorkouts();renderHeat();toast('已记录');
+}
+function wkCheckin(t){toast('运动打卡成功,金币 +1('+t+')');}
+
+/* ============ 健康:视频跟练 ============ */
+const vids=[
+  {title:'晨间 10 分钟拉伸',min:10},
+  {title:'15 分钟燃脂操',min:15},
+  {title:'瑜伽基础入门 20 分钟',min:20},
+  {title:'睡前放松跟练',min:12},
+];
+let tmrSec=0,tmrOn=false,tmrTimer=null;
+function tmrTick(){tmrSec++;$('tmrDisplay').textContent=String(Math.floor(tmrSec/60)).padStart(2,'0')+':'+String(tmrSec%60).padStart(2,'0');}
+function tmrToggle(){
+  tmrOn=!tmrOn;
+  $('tmrBtn').textContent=tmrOn?'暂停':'开始';
+  if(tmrOn)tmrTimer=setInterval(tmrTick,1000);
+  else clearInterval(tmrTimer);
+}
+function tmrReset(){clearInterval(tmrTimer);tmrOn=false;tmrSec=0;$('tmrBtn').textContent='开始';$('tmrDisplay').textContent='00:00';}
+function tmrCheckin(){
+  if(tmrSec<=0){toast('先开始计时再打卡吧');return;}
+  toast('跟练完成,金币 +1(时长 '+Math.floor(tmrSec/60)+' 分钟)');
+  tmrReset();
+}
+function renderVids(){
+  $('vdList').innerHTML=vids.map(v=>'<div class="li"><div class="main"><div class="t">'+v.title+'</div><div class="d">'+v.min+' 分钟</div></div><span class="small" style="color:var(--primary-dark)">视频</span></div>').join('');
+}
+
+/* ============ 健康:运动日历 ============ */
+function renderHeat(){
+  const base=new Date(today0.getFullYear(),today0.getMonth(),1);
+  $('hmMonth').textContent=(base.getMonth()+1)+' 月';
+  const days=new Date(base.getFullYear(),base.getMonth()+1,0).getDate();
+  const first=base.getDay();
+  const byDay={};
+  workouts.forEach(w=>{byDay[w.date]=(byDay[w.date]||0)+w.min;});
+  let html='<div class="wk">日</div><div class="wk">一</div><div class="wk">二</div><div class="wk">三</div><div class="wk">四</div><div class="wk">五</div><div class="wk">六</div>';
+  for(let i=0;i<first;i++)html+='<div class="day blank"></div>';
+  let total=0,count=0;
+  for(let d=1;d<=days;d++){
+    const key=dstr(new Date(base.getFullYear(),base.getMonth(),d));
+    const m=byDay[key]||0;
+    if(m>0){total+=m;count++;}
+    const lv=m===0?'':m<20?'l1':m<40?'l2':m<60?'l3':'l4';
+    html+='<div class="day '+lv+'">'+d+'</div>';
+  }
+  $('hmGrid').innerHTML=html;
+  $('hmStats').innerHTML='<div class="metric"><div class="v">'+count+'</div><div class="l">运动天数</div></div><div class="metric"><div class="v">'+total+'</div><div class="l">总时长(分)</div></div><div class="metric"><div class="v">'+((count?Math.round(total/count):0))+'</div><div class="l">日均(分)</div></div>';
+}
+
+/* ============ 健康:tab ============ */
+function hlTab(i){$('hlSeg').querySelectorAll('button').forEach((b,x)=>b.classList.toggle('on',x===i));
+  ['hlKitchen','hlPlan','hlWorkout','hlVideo','hlHeat'].forEach((id,x)=>$(id).style.display=x===i?'block':'none');
+  if(i===1){}if(i===2)renderWorkouts();if(i===3)renderVids();if(i===4)renderHeat();}
+
+/* ============ 写随笔 ============ */
+const moods=[['happy','开心'],['calm','平静'],['sad','难过']];
+let essays=[
+  {title:'今天的小确幸',mood:'happy',body:'傍晚的云很好看,看完了一直想看的书,心情不错。',date:dstr(daysAgo(1))},
+  {title:'关于坚持',mood:'calm',body:'慢慢来,比较快。每天一点点,比三分钟热度强。',date:dstr(daysAgo(3))},
+];
+let esMood='happy',esEdit=-1;
+function renderEssays(){
+  $('esMoodChips').innerHTML=moods.map(m=>'<button class="chip'+(m[0]===esMood?' on':'')+'" onclick="pickMood(\''+m[0]+'\')">'+m[1]+'</button>').join('');
+  $('esList').innerHTML=essays.map((e,i)=>{
+    const mc=moods.find(m=>m[0]===e.mood);
+    return '<div class="card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="mood '+(mc?mc[0]:'')+'">'+(mc?mc[1]:'')+'</span><span class="small">'+e.date+'</span><span style="flex:1"></span><button class="icon-btn" onclick="editEssay('+i+')"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button><button class="icon-btn" onclick="delEssay('+i+')">×</button></div><div style="font-size:15px;font-weight:700">'+e.title+'</div><div class="muted" style="font-size:13px;line-height:1.6;margin-top:4px">'+e.body+'</div></div>';
+  }).join('')||'<div class="empty">还没有随笔,写一篇吧~</div>';
+}
+function pickMood(m){esMood=m;renderEssays();}
+function openEssay(){esEdit=-1;$('esTitle').textContent='新建随笔';$('esName').value='';$('esBody').value='';esMood='happy';renderEssays();openMask('es');}
+function editEssay(i){esEdit=i;const e=essays[i];$('esTitle').textContent='编辑随笔';$('esName').value=e.title;$('esBody').value=e.body;esMood=e.mood;renderEssays();openMask('es');}
+function saveEssay(){
+  const title=$('esName').value.trim(),body=$('esBody').value.trim();
+  if(!title&&!body){toast('写点什么吧');return;}
+  if(esEdit>=0){essays[esEdit]={title:title||'无标题',mood:esMood,body,date:essays[esEdit].date};}
+  else{essays.unshift({title:title||'无标题',mood:esMood,body,date:dstr(today0)});}
+  closeMask('es');renderEssays();toast('已保存');
+}
+function delEssay(i){const e=essays[i];if(confirm('删除随笔「'+e.title+'」?')){essays.splice(i,1);renderEssays();toast('已删除');}}
+
+/* 初始化 */
+renderHeat();
+</script>
+</body>
+</html>

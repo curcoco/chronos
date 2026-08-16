@@ -31,14 +31,14 @@ class AppInfo {
   AppInfo._();
 
   /// 离线兜底用的「最新版本」参照,每次发版时与 pubspec.yaml 的 version 同步更新。
-  static const String latestVersion = '1.3.2';
+  static const String latestVersion = '1.6.3';
 
   /// 更新检查地址:托管一个 HTTPS 可达的 latest.json,内容形如
   /// {"version":"1.2.0","note":"…","apk":"https://…/chronos-1.2.0.apk"}
-  /// 真实地址:腾讯云 COS(国内直连,APK 在 releases/ 目录,见 D:\dev\student_workbench\releases\)。
-  /// GitHub 仓库 curcoco/chronos 仅作源码备份/镜像,不再作为更新源。
+  /// 更新源:GitHub 仓库 curcoco/chronos。latest.json 走 raw 直链读取,
+  /// APK 放在对应 Release 的附件里(见 apk 字段)。
   static const String updateCheckUrl =
-      'https://chronos-update-1456265383.cos.ap-guangzhou.myqcloud.com/latest.json';
+      'https://raw.githubusercontent.com/curcoco/chronos/main/latest.json';
 
   /// 从打包进 APK 的 pubspec.yaml 读取安装版本(如 1.2.0+3 → 1.2.0)
   static Future<String> installedVersion() async {
@@ -60,7 +60,7 @@ class AppInfo {
       return UpdateStatus(
         reachable: true,
         updateAvailable:
-            installed.isNotEmpty && _compare(installed, remote.version) < 0,
+            installed.isNotEmpty && compareVersions(installed, remote.version) < 0,
         latestVersion: remote.version,
         note: remote.note,
         apkUrl: remote.apk,
@@ -69,7 +69,7 @@ class AppInfo {
     return UpdateStatus(
       reachable: false,
       updateAvailable:
-          installed.isNotEmpty && _compare(installed, latestVersion) < 0,
+          installed.isNotEmpty && compareVersions(installed, latestVersion) < 0,
       latestVersion: latestVersion,
     );
   }
@@ -105,8 +105,9 @@ class AppInfo {
     }
   }
 
-  /// 语义化版本比较 '1.2.0' vs '1.1.0' → 1(大于),返回 -1/0/1
-  static int _compare(String a, String b) {
+  /// 语义化版本比较 '1.2.0' vs '1.1.0' → 1(大于),返回 -1/0/1。
+  /// 对外暴露(供单元测试与更新判定复用),不依赖任何实例状态。
+  static int compareVersions(String a, String b) {
     final pa = a.split('.').map((s) => int.tryParse(s) ?? 0).toList();
     final pb = b.split('.').map((s) => int.tryParse(s) ?? 0).toList();
     final len = pa.length > pb.length ? pa.length : pb.length;

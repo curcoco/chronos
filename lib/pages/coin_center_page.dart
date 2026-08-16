@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../data/wish_content.dart';
 import '../models/coin_record.dart';
 import '../models/wish.dart';
 import '../services/coin_service.dart';
 import '../services/wish_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
+import '../widgets/frosted_snack.dart';
 
 /// 金币中心:心愿清单兑换 + 收支历史
 class CoinCenterPage extends StatelessWidget {
@@ -76,8 +78,7 @@ class _WishTabState extends State<_WishTab> {
 
   void _showSnack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    showFrostedSnack(context, msg);
   }
 
   Future<void> _addWish() async {
@@ -134,6 +135,19 @@ class _WishTabState extends State<_WishTab> {
     await _load();
   }
 
+  /// 随机添加一个系统心愿(排除已许过的)
+  Future<void> _addRandomWish() async {
+    final existing = _wishes.map((w) => w.title).toSet();
+    final pick = WishContent.randomWish(existing);
+    if (pick == null) {
+      _showSnack('心愿池都许过啦,试试自定义添加');
+      return;
+    }
+    await _wishService.addWish(title: pick.title, cost: pick.cost);
+    await _load();
+    _showSnack('已添加随机心愿:${pick.title}');
+  }
+
   Future<void> _redeem(Wish wish) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -156,10 +170,37 @@ class _WishTabState extends State<_WishTab> {
     final ok = await CoinService.instance.redeemWish(wish, todayStr());
     await _load();
     if (ok) {
-      _showSnack('兑换成功!🎉');
+      _showSnack('兑换成功!');
     } else {
       _showSnack('金币不足,继续加油攒金币吧~');
     }
+  }
+
+  /// 删除心愿:删除前二次确认(避免误删)
+  Future<void> _deleteWish(Wish wish) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除心愿'),
+        content: Text('确定删除「${wish.title}」?删除后不可恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFE53935)),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    await _wishService.deleteWish(wish.id!);
+    await _load();
+    _showSnack('已删除心愿');
   }
 
   @override
@@ -172,7 +213,7 @@ class _WishTabState extends State<_WishTab> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
+                  gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [AppColors.primaryLight, AppColors.primary],
@@ -209,20 +250,40 @@ class _WishTabState extends State<_WishTab> {
                 ),
               ),
               const SizedBox(height: 14),
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppColors.primaryDark,
-                  side: const BorderSide(color: AppColors.primary),
-                ),
-                onPressed: _addWish,
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('添加心愿'),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        backgroundColor: AppColors.card,
+                        foregroundColor: AppColors.primaryDark,
+                        side: BorderSide(color: AppColors.primary),
+                      ),
+                      onPressed: _addWish,
+                      icon: const Icon(Icons.add_rounded, size: 20),
+                      label: const Text('添加心愿'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        backgroundColor: AppColors.card,
+                        foregroundColor: AppColors.primaryDark,
+                        side: BorderSide(color: AppColors.primary),
+                      ),
+                      onPressed: _addRandomWish,
+                      icon: const Icon(Icons.casino_rounded, size: 20),
+                      label: const Text('随机心愿'),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 14),
               if (_wishes.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(vertical: 30),
                   child: Center(
                     child: Text('还没有心愿,许一个愿吧~',
@@ -273,7 +334,7 @@ class _WishTabState extends State<_WishTab> {
                   const SizedBox(height: 3),
                   Text(
                     '需要 ${wish.cost} 金币',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 12, color: AppColors.textSub),
                   ),
                 ],
@@ -304,6 +365,12 @@ class _WishTabState extends State<_WishTab> {
                 onPressed: enough ? () => _redeem(wish) : null,
                 child: const Text('兑换'),
               ),
+            IconButton(
+              onPressed: () => _deleteWish(wish),
+              icon: Icon(Icons.delete_outline_rounded,
+                  size: 20, color: AppColors.textSub),
+              tooltip: '删除心愿',
+            ),
           ],
         ),
       ),
@@ -343,7 +410,7 @@ class _RecordTabState extends State<_RecordTab> {
     return _loading
         ? const Center(child: CircularProgressIndicator())
         : _records.isEmpty
-            ? const Center(
+            ? Center(
                 child: Text('还没有收支记录,快去完成今日任务吧~',
                     style: TextStyle(color: AppColors.textSub)),
               )
@@ -390,7 +457,7 @@ class _RecordTabState extends State<_RecordTab> {
                                 const SizedBox(height: 3),
                                 Text(
                                   dateTimeLabel(r.createdAt),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       fontSize: 11,
                                       color: AppColors.textSub),
                                 ),

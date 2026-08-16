@@ -47,7 +47,14 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 
-# 构建产物:根目录 APK + releases/ 下的 APK。
-# APK 只放腾讯云 COS 当更新源,不进 git(git 仅作源码备份),避免仓库被二进制撑爆。
+# 构建产物:根目录 APK + releases/ 下的 APK 均不进 git(二进制走 GitHub Release / 更新源),避免仓库被撑爆。
 /app-release.apk
 /releases/*.apk
+/android/build/
+
+# 发布签名:keystore 与密码文件绝不进 git(泄露=任何人可伪造覆盖安装)。
+/android/key.properties
+/android/*.jks
+/android/*.keystore
+/android/app/*.jks
+/android/app/*.keystore
