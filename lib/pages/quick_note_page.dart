@@ -244,7 +244,7 @@ class _QuickNotePageState extends State<QuickNotePage> {
                       minLines: 1,
                       maxLines: 3,
                       maxLength: 200,
-                      textInputAction: TextInputAction.send,
+                      textInputAction: TextInputAction.done,
                       onSubmitted: (_) => _save(),
                       decoration: const InputDecoration(
                         hintText: '随时记录一句话灵感…',
@@ -253,20 +253,21 @@ class _QuickNotePageState extends State<QuickNotePage> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // 发送按钮:用 Material+InkWell 显式实现,避免受全局 FilledButton
-                  // 主题 minimumSize(高 52)与 48×48 容器的约束冲突导致点击无响应。
-                  Material(
-                    color: AppColors.primary,
-                    shape: const CircleBorder(),
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: _save,
-                      child: const SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Icon(Icons.send_rounded,
-                            size: 22, color: Colors.white),
-                      ),
+                  // 发送按钮:用 IconButton(自带稳定的点击热区)包一层圆形底色,
+                  // 避免此前 FilledButton 受全局主题 minimumSize 影响导致点击无响应。
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      onPressed: _save,
+                      padding: EdgeInsets.zero,
+                      tooltip: '保存灵感',
+                      icon: const Icon(Icons.send_rounded,
+                          size: 22, color: Colors.white),
                     ),
                   ),
                 ],

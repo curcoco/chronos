@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../services/app_info.dart';
+import '../services/backup_service.dart';
 import '../services/settings_service.dart';
 import '../theme.dart';
+import '../widgets/frosted_snack.dart';
 import '../widgets/section_card.dart';
 import '../widgets/update_download_button.dart';
 import 'api_settings_page.dart';
+import 'extension_service_page.dart';
 
 /// 系统设置:关于(应用名、简介)+ 版本号与更新状态
 class SettingsPage extends StatefulWidget {
@@ -39,6 +43,25 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() => _status = s);
   }
 
+  bool _exporting = false;
+
+  Future<void> _exportData() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final path = await BackupService.instance.exportZip();
+      if (!mounted) return;
+      showFrostedSnack(context, '已导出备份到:$path');
+      // 顺手唤起系统分享,方便直接发送/另存到网盘或换机
+      await Share.shareXFiles([XFile(path)], subject: 'Chronos 数据备份');
+    } catch (e) {
+      if (!mounted) return;
+      showFrostedSnack(context, '导出失败:$e');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = _status;
@@ -54,28 +77,31 @@ class _SettingsPageState extends State<SettingsPage> {
               children: [
                 Row(
                   children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [AppColors.primaryLight, AppColors.primary],
-                        ),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
+                    // 连点 7 下此图标 → 输入 6 位密码进入拓展服务页(隐藏入口)
+                    SecretUnlockTap(
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [AppColors.primaryLight, AppColors.primary],
                           ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.school_rounded,
-                        size: 30,
-                        color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primary.withValues(alpha: 0.3),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.school_rounded,
+                          size: 30,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -210,6 +236,49 @@ class _SettingsPageState extends State<SettingsPage> {
                           SettingsService.instance.setThemeMode(s.first),
                     );
                   },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          SectionCard(
+            title: '数据备份',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '导出本地数据',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMain,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '把全部本地数据(任务 / 心愿 / 金币 / 日记 / 记忆 / 计划 / 记账等)'
+                  '与个人设置打包成 zip 保存到本机,便于备份或更换设备。不含 API 密钥。',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSub, height: 1.5),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      minimumSize: const Size.fromHeight(46),
+                    ),
+                    onPressed: _exporting ? null : _exportData,
+                    icon: _exporting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.archive_rounded, size: 18),
+                    label: Text(_exporting ? '正在导出…' : '导出为 zip 备份'),
+                  ),
                 ),
               ],
             ),

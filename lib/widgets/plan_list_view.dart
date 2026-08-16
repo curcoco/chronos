@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 
+import '../data/daily_content.dart';
 import '../models/plan_item.dart';
 import '../services/plan_service.dart';
 import '../theme.dart';
@@ -91,6 +93,22 @@ class _PlanListViewState extends State<PlanListView> {
     await _load();
   }
 
+  /// 系统随机生成一条(排除已存在的标题,避免重复)
+  Future<void> _generateRandom() async {
+    final exclude = _items.map((e) => e.title).toSet();
+    final isWeek = widget.scope == PlanItem.scopeWeek;
+    final picked = isWeek
+        ? DailyContent.randomWeekPlan(exclude: exclude)
+        : DailyContent.randomLongTermGoal(exclude: exclude);
+    await _service.add(
+      scope: widget.scope,
+      title: picked.title,
+      detail: picked.detail,
+    );
+    await _load();
+    _snack('已随机生成一条${widget.title}');
+  }
+
   Future<void> _delete(PlanItem item) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -146,14 +164,36 @@ class _PlanListViewState extends State<PlanListView> {
           ),
         ),
         const SizedBox(height: 14),
-        FilledButton.icon(
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            minimumSize: const Size.fromHeight(48),
-          ),
-          onPressed: () => _addOrEdit(),
-          icon: const Icon(Icons.add_rounded),
-          label: Text('添加${widget.title}'),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                onPressed: () => _addOrEdit(),
+                icon: const Icon(Icons.add_rounded),
+                label: Text('添加${widget.title}'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                  foregroundColor: AppColors.primaryDark,
+                  side: BorderSide(
+                      color: AppColors.primary.withValues(alpha: 0.5)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
+                ),
+                onPressed: _generateRandom,
+                icon: const Icon(Icons.casino_rounded, size: 20),
+                label: const Text('随机生成'),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 14),
         if (total == 0)
@@ -178,62 +218,89 @@ class _PlanListViewState extends State<PlanListView> {
   }
 
   Widget _tile(PlanItem item) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(6, 6, 4, 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    // 编辑/删除键默认隐藏,右滑(从左向右)显示操作按钮。
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Slidable(
+        key: ValueKey(item.id),
+        startActionPane: ActionPane(
+          motion: const DrawerMotion(),
+          extentRatio: 0.5,
           children: [
-            Checkbox(
-              value: item.done,
-              activeColor: AppColors.primary,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(5)),
-              onChanged: (_) => _toggle(item),
+            SlidableAction(
+              onPressed: (_) => _addOrEdit(item),
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              icon: Icons.edit_outlined,
+              label: '编辑',
+              borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(18)),
             ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.title,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color:
-                            item.done ? AppColors.textSub : AppColors.textMain,
-                        decoration:
-                            item.done ? TextDecoration.lineThrough : null,
-                      ),
-                    ),
-                    if (item.detail.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        item.detail,
-                        style:
-                            TextStyle(fontSize: 12, color: AppColors.textSub),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            IconButton(
-              onPressed: () => _addOrEdit(item),
-              icon: Icon(Icons.edit_outlined,
-                  size: 19, color: AppColors.textSub),
-              tooltip: '编辑',
-            ),
-            IconButton(
-              onPressed: () => _delete(item),
-              icon: Icon(Icons.delete_outline_rounded,
-                  size: 20, color: AppColors.textSub),
-              tooltip: '删除',
+            SlidableAction(
+              onPressed: (_) => _delete(item),
+              backgroundColor: const Color(0xFFE53935),
+              foregroundColor: Colors.white,
+              icon: Icons.delete_outline_rounded,
+              label: '删除',
+              borderRadius: const BorderRadius.horizontal(
+                  right: Radius.circular(18)),
             ),
           ],
+        ),
+        child: Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Checkbox(
+                  value: item.done,
+                  activeColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(5)),
+                  onChanged: (_) => _toggle(item),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.title,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: item.done
+                                ? AppColors.textSub
+                                : AppColors.textMain,
+                            decoration:
+                                item.done ? TextDecoration.lineThrough : null,
+                          ),
+                        ),
+                        if (item.detail.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            item.detail,
+                            style: TextStyle(
+                                fontSize: 12, color: AppColors.textSub),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                // 右滑提示:小箭头暗示可滑出操作
+                Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: Icon(Icons.swipe_right_alt_rounded,
+                      size: 18,
+                      color: AppColors.textSub.withValues(alpha: 0.5)),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

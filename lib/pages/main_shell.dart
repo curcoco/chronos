@@ -8,6 +8,7 @@ import '../widgets/frosted_snack.dart';
 import 'chat_page.dart';
 import 'coin_center_page.dart';
 import 'diary_page.dart';
+import 'extension_service_page.dart';
 import 'home_page.dart';
 import 'knowledge_page.dart';
 import 'ledger_page.dart';
@@ -227,22 +228,25 @@ class _AppDrawerState extends State<_AppDrawer> {
               ),
               child: Row(
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [AppColors.primaryLight, AppColors.primary],
+                  // 连点 7 下此图标 → 输入 6 位密码进入拓展服务页(隐藏入口)
+                  SecretUnlockTap(
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [AppColors.primaryLight, AppColors.primary],
+                        ),
+                        shape: BoxShape.circle,
                       ),
-                      shape: BoxShape.circle,
+                      child: Icon(Icons.school_rounded,
+                          size: 26,
+                          color: isDarkMode
+                              ? const Color(0xFF07222E)
+                              : Colors.white),
                     ),
-                    child: Icon(Icons.school_rounded,
-                        size: 26,
-                        color: isDarkMode
-                            ? const Color(0xFF07222E)
-                            : Colors.white),
                   ),
                   const SizedBox(width: 12),
                   Column(

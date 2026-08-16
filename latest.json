@@ -1,5 +1,5 @@
 {
-  "version": "1.6.3",
-  "note": "心愿支持删除(带确认);修复灵感速记发送键失效;深色模式适配侧边栏顶部;更新源迁移至 GitHub",
-  "apk": "https://github.com/curcoco/chronos/releases/download/v1.6.3/chronos-1.6.3.apk"
+  "version": "1.6.4",
+  "note": "灵感速记发送键修复;明暗切换即时刷新;设置页支持导出本地数据为 zip;新增隐藏拓展服务(云端 AI 记忆);日记固定当天并优化历史样式;本周计划与长期目标支持随机生成;计划条右滑显示编辑/删除",
+  "apk": "https://github.com/curcoco/chronos/releases/download/v1.6.4/chronos-1.6.4.apk"
 }

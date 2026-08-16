@@ -21,7 +21,7 @@ class _DiaryPageState extends State<DiaryPage>
   final TextEditingController _ctrl = TextEditingController();
   late final TabController _tabs = TabController(length: 2, vsync: this);
 
-  String _date = todayStr();
+  final String _date = todayStr();
   String? _mood;
   List<DiaryEntry> _entries = [];
   bool _loading = true;
@@ -115,20 +115,48 @@ class _DiaryPageState extends State<DiaryPage>
     showFrostedSnack(context, '已删除');
   }
 
-  void _moveDate(int days) {
-    final now = DateTime.now();
-    final current = DateTime.tryParse('${_date}T00:00:00') ?? now;
-    final target = current.add(Duration(days: days));
-    if (target.isAfter(now)) return; // 不允许未来
-    if (target.year < 2020) return;
-    setState(() => _date = dateKey(target));
-    _loadCurrent();
-  }
-
   void _openHistory(DiaryEntry e) {
-    setState(() => _date = e.date);
-    _loadCurrent();
-    _tabs.animateTo(0);
+    // 写作页固定当天,历史仅供查看:弹只读详情,不再载入编辑器改写过去。
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.card,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.6,
+          maxChildSize: 0.9,
+          minChildSize: 0.3,
+          builder: (context, controller) => ListView(
+            controller: controller,
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      fullDateTimeLabel(e.updatedAt),
+                      style: TextStyle(
+                          fontSize: 13, color: AppColors.textSub),
+                    ),
+                  ),
+                  if (e.mood != null) MoodBadge(mood: e.mood),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                e.content,
+                style: TextStyle(
+                    fontSize: 15, height: 1.7, color: AppColors.textMain),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -160,27 +188,23 @@ class _DiaryPageState extends State<DiaryPage>
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       children: [
-        Row(
-          children: [
-            IconButton(
-              onPressed: () => _moveDate(-1),
-              icon: const Icon(Icons.chevron_left_rounded),
-              tooltip: '前一天',
-            ),
-            Expanded(
-              child: Text(
-                '${cur.year}年${cur.month}月${cur.day}日',
-                textAlign: TextAlign.center,
+        // 日记固定为「今天」,不提供选日期(避免回填/篡改历史)。
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.today_rounded,
+                  size: 18, color: AppColors.primaryDark),
+              const SizedBox(width: 8),
+              Text(
+                '${cur.year}年${cur.month}月${cur.day}日 · ${weekdayLabel(cur)}',
                 style: const TextStyle(
                     fontSize: 15, fontWeight: FontWeight.w700),
               ),
-            ),
-            IconButton(
-              onPressed: () => _moveDate(1),
-              icon: const Icon(Icons.chevron_right_rounded),
-              tooltip: '后一天',
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 6),
         Wrap(
@@ -235,7 +259,7 @@ class _DiaryPageState extends State<DiaryPage>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary : Colors.white,
+          color: selected ? AppColors.primary : AppColors.card,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
               color: selected ? AppColors.primary : AppColors.line),
@@ -264,10 +288,6 @@ class _DiaryPageState extends State<DiaryPage>
       itemCount: _entries.length,
       itemBuilder: (context, i) {
         final e = _entries[i];
-        final dt = DateTime.tryParse('${e.date}T00:00:00');
-        final title = dt == null
-            ? e.date
-            : '${dt.year}年${dt.month}月${dt.day}日';
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
           child: InkWell(
@@ -278,22 +298,34 @@ class _DiaryPageState extends State<DiaryPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 正文在上:加粗、字号更大(与日期行的样式互换)
                   Row(
                     children: [
-                      Text(title,
+                      Expanded(
+                        child: Text(
+                          e.content,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w700)),
-                      const Spacer(),
-                      if (e.mood != null) MoodBadge(mood: e.mood),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              height: 1.5),
+                        ),
+                      ),
+                      if (e.mood != null) ...[
+                        const SizedBox(width: 8),
+                        MoodBadge(mood: e.mood),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 6),
+                  // 日期在下:24 小时制、精确到分,细体小字
                   Text(
-                    e.content,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    fullDateTimeLabel(e.updatedAt),
                     style: TextStyle(
-                        fontSize: 13, color: AppColors.textSub, height: 1.5),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.textSub),
                   ),
                 ],
               ),

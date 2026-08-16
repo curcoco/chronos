@@ -28,6 +28,10 @@ class StudentWorkbenchApp extends StatelessWidget {
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),
           themeMode: mode,
+          // 主题切换动画设为 0:Theme.of 的过渡默认有 ~200ms 渐变,而 AppColors
+          // 运行时取值是瞬时翻转的,两者不一致会让部分模块看起来「慢半拍」。
+          // 取消渐变后所有模块同步瞬时切换,消除刷新延迟观感。
+          themeAnimationDuration: Duration.zero,
           // 每帧根据真正生效的主题亮度同步 AppColors 的运行时取值,
           // 保证「跟随系统」下 AppColors.* 与实际显示一致。
           builder: (context, child) {

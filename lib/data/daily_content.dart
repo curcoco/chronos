@@ -105,4 +105,54 @@ class DailyContent {
     final pool = candidates.isEmpty ? autoTasks : candidates;
     return pool[Random().nextInt(pool.length)];
   }
+
+  /// 本周计划建议池(title + detail)
+  static const List<({String title, String detail})> weekPlans = [
+    (title: '完成本周所有学科作业', detail: '按科目分配到每天,避免最后一天赶工'),
+    (title: '复习本周课堂笔记', detail: '每天抽 20 分钟回顾当天要点'),
+    (title: '背诵 50 个英语单词', detail: '每天 10 个,周末统一复盘'),
+    (title: '读完一本课外书的一章', detail: '记录 3 句喜欢的句子'),
+    (title: '整理一次错题本', detail: '把本周错题归类、标注原因'),
+    (title: '运动三次,每次 30 分钟', detail: '跑步 / 跳绳 / 球类都可'),
+    (title: '预习下周新课内容', detail: '列出不懂的问题,课上重点听'),
+    (title: '完成一次学习复盘', detail: '总结做得好的与要改进的'),
+    (title: '练字 15 分钟 × 5 天', detail: '保持字迹工整'),
+    (title: '规律作息,每天 23 点前睡', detail: '睡前不玩手机'),
+    (title: '帮家里做三次家务', detail: '洗碗 / 扫地 / 整理房间'),
+    (title: '每天喝够 8 杯水', detail: '用打卡提醒自己'),
+  ];
+
+  /// 长期目标建议池(title + detail)
+  static const List<({String title, String detail})> longTermGoals = [
+    (title: '养成每天阅读的习惯', detail: '目标每天至少 20 分钟,坚持一学期'),
+    (title: '英语词汇量提升到 3000', detail: '每天积累,配合听力与阅读'),
+    (title: '数学成绩提升一个档次', detail: '主攻薄弱章节,建立错题体系'),
+    (title: '坚持锻炼身体', detail: '每周运动 3 次以上,增强体质'),
+    (title: '学会一项新技能', detail: '如乐器 / 编程 / 绘画,循序渐进'),
+    (title: '改掉拖延习惯', detail: '用任务清单和番茄钟管理时间'),
+    (title: '培养规律作息', detail: '早睡早起,保证充足睡眠'),
+    (title: '读完 10 本好书', detail: '涵盖不同题材,做读书笔记'),
+    (title: '提升专注力', detail: '减少分心,单次专注时长逐步拉长'),
+    (title: '建立健康的理财意识', detail: '记录零花钱收支,学会储蓄'),
+  ];
+
+  /// 随机取一条本周计划(可排除已有标题)
+  static ({String title, String detail}) randomWeekPlan({
+    Set<String> exclude = const {},
+  }) {
+    final candidates =
+        weekPlans.where((t) => !exclude.contains(t.title)).toList();
+    final pool = candidates.isEmpty ? weekPlans : candidates;
+    return pool[Random().nextInt(pool.length)];
+  }
+
+  /// 随机取一条长期目标(可排除已有标题)
+  static ({String title, String detail}) randomLongTermGoal({
+    Set<String> exclude = const {},
+  }) {
+    final candidates =
+        longTermGoals.where((t) => !exclude.contains(t.title)).toList();
+    final pool = candidates.isEmpty ? longTermGoals : candidates;
+    return pool[Random().nextInt(pool.length)];
+  }
 }

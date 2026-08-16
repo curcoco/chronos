@@ -10,6 +10,7 @@ import '../services/supabase_sync_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
 import '../widgets/frosted_snack.dart';
+import 'extension_service_page.dart';
 
 /// AI 长期记忆管理:查看 / 添加 / 删除 / 提炼 / 云端同步
 class MemoryPage extends StatefulWidget {
@@ -26,6 +27,8 @@ class _MemoryPageState extends State<MemoryPage> {
   String _kind = 'all';
   bool _loading = true;
   bool _cloudAuto = false;
+  // 云端记忆服务总开关(拓展服务页开启后才为 true;控制自动上传模块是否显示)
+  bool _cloudServiceEnabled = false;
 
   @override
   void initState() {
@@ -36,10 +39,13 @@ class _MemoryPageState extends State<MemoryPage> {
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
     final auto = prefs.getBool('memory_cloud_auto') ?? false;
+    final serviceEnabled =
+        prefs.getBool(ExtensionServicePage.prefCloudMemoryEnabled) ?? false;
     final items = await _service.list();
     if (!mounted) return;
     setState(() {
       _cloudAuto = auto;
+      _cloudServiceEnabled = serviceEnabled;
       _items = items;
       _loading = false;
     });
@@ -270,44 +276,50 @@ class _MemoryPageState extends State<MemoryPage> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
               children: [
-                // 云同步说明与开关
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.line),
+                // 云同步说明与开关(仅在拓展服务页开启云端记忆服务后显示)
+                if (_cloudServiceEnabled) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.line),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.cloud_outlined,
+                                size: 18, color: AppColors.textSub),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text('自动上传云端(Supabase)',
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textMain)),
+                            ),
+                            Switch(
+                              value: _cloudAuto,
+                              activeThumbColor: AppColors.primary,
+                              onChanged: _toggleCloud,
+                            ),
+                          ],
+                        ),
+                        Text(
+                          '默认存本地。开启后新记忆自动同步到云端,可跨设备。'
+                          '未配置 Supabase 时同步会跳过。',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSub,
+                              height: 1.5),
+                        ),
+                      ],
+                    ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.cloud_outlined,
-                              size: 18, color: AppColors.textSub),
-                          const SizedBox(width: 8),
-                          const Expanded(
-                            child: Text('自动上传云端(Supabase)',
-                                style: TextStyle(
-                                    fontSize: 13, fontWeight: FontWeight.w600)),
-                          ),
-                          Switch(
-                            value: _cloudAuto,
-                            activeThumbColor: AppColors.primary,
-                            onChanged: _toggleCloud,
-                          ),
-                        ],
-                      ),
-                      Text(
-                        '默认存本地。开启后新记忆自动同步到云端,可跨设备。'
-                        '未配置 Supabase 时同步会跳过。',
-                        style: TextStyle(
-                            fontSize: 11, color: AppColors.textSub, height: 1.5),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
+                  const SizedBox(height: 10),
+                ],
                 Row(
                   children: [
                     Expanded(
@@ -322,14 +334,17 @@ class _MemoryPageState extends State<MemoryPage> {
                         label: const Text('添加记忆'),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _syncNow,
-                        icon: const Icon(Icons.cloud_upload_rounded, size: 18),
-                        label: const Text('同步到云端'),
+                    // 「同步到云端」仅在云端记忆服务开启后出现
+                    if (_cloudServiceEnabled) ...[
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _syncNow,
+                          icon: const Icon(Icons.cloud_upload_rounded, size: 18),
+                          label: const Text('同步到云端'),
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 12),
