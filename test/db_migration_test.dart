@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:student_workbench/models/diary_entry.dart';
-import 'package:student_workbench/models/note.dart';
-import 'package:student_workbench/services/db_helper.dart';
+import 'package:student_workbench/features/diary/models/diary_entry.dart';
+import 'package:student_workbench/features/notes/models/note.dart';
+import 'package:student_workbench/core/services/db_helper.dart';
 
 /// 数据库层集成测试:用 sqflite_common_ffi 在桌面/CI 上跑真实 SQLite。
 /// 覆盖两条高风险路径:

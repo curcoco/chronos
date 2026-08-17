@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:student_workbench/services/app_info.dart';
-import 'package:student_workbench/services/coin_service.dart';
-import 'package:student_workbench/services/task_service.dart';
-import 'package:student_workbench/models/student_task.dart';
-import 'package:student_workbench/data/daily_content.dart';
-import 'package:student_workbench/utils/dates.dart';
+import 'package:student_workbench/core/services/app_info.dart';
+import 'package:student_workbench/features/coins/services/coin_service.dart';
+import 'package:student_workbench/features/tasks/services/task_service.dart';
+import 'package:student_workbench/features/tasks/models/student_task.dart';
+import 'package:student_workbench/core/data/daily_content.dart';
+import 'package:student_workbench/core/utils/dates.dart';
 
 void main() {
   group('AppInfo.compareVersions 版本比较', () {
