@@ -14,6 +14,7 @@ import '../widgets/app_text_field.dart';
 import '../widgets/frosted_snack.dart';
 import '../widgets/section_card.dart';
 import '../widgets/task_confirm_dialog.dart';
+import 'api_settings_page.dart';
 import 'coin_center_page.dart';
 import 'diary_page.dart';
 
@@ -34,6 +35,7 @@ class _HomePageState extends State<HomePage> {
 
   bool _loading = true;
   bool _savingNote = false; // 灵感速记保存去抖
+  bool _showOnboarding = false; // 首次引导卡
   List<StudentTask> _tasks = [];
   int _coin = 0;
   int _todayEarned = 0;
@@ -66,6 +68,7 @@ class _HomePageState extends State<HomePage> {
       CoinService.instance.balance(),
       CoinService.instance.earnedToday(date),
       SettingsService.instance.nickname(),
+      SettingsService.instance.isOnboardingDone(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -73,6 +76,7 @@ class _HomePageState extends State<HomePage> {
       _coin = results[1] as int;
       _todayEarned = results[2] as int;
       _nickname = results[3] as String;
+      _showOnboarding = !(results[4] as bool);
       _quote = DailyContent.quoteFor(date);
       _english = DailyContent.englishFor(now);
       _dateLabel = monthDayLabel(now);
@@ -181,6 +185,10 @@ class _HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                 children: [
                   _buildHeader(),
+                  if (_showOnboarding) ...[
+                    const SizedBox(height: 12),
+                    _buildOnboardingCard(),
+                  ],
                   if (_weather != null) ...[
                     const SizedBox(height: 12),
                     _buildWeatherStrip(),
@@ -196,6 +204,67 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
+    );
+  }
+
+  /// 首次引导卡:离线功能开箱即用;联网功能(天气/AI 聊天/更新)需在
+  /// 「系统设置 → API 配置」填写 key。关闭后不再出现(存本地标记)。
+  Widget _buildOnboardingCard() {
+    return SectionCard(
+      title: '欢迎使用 Chronos',
+      trailing: IconButton(
+        onPressed: () async {
+          await SettingsService.instance.setOnboardingDone();
+          if (!mounted) return;
+          setState(() => _showOnboarding = false);
+        },
+        icon: Icon(Icons.close_rounded, size: 18, color: AppColors.textSub),
+        tooltip: '关闭',
+        visualDensity: VisualDensity.compact,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '计划 / 金币 / 灵感 / 记账等全部功能离线可用,数据只存本机。',
+            style: TextStyle(fontSize: 13, height: 1.5, color: AppColors.textMain),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '天气与 AI 聊天需联网:在「系统设置 → API 配置」填入你的 key 即可。',
+            style: TextStyle(fontSize: 12, height: 1.5, color: AppColors.textSub),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              FilledButton.tonal(
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  backgroundColor: AppColors.primaryLight,
+                  foregroundColor: AppColors.primaryDark,
+                ),
+                onPressed: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const ApiSettingsPage()),
+                  );
+                },
+                child: const Text('去配置 API'),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () async {
+                  await SettingsService.instance.setOnboardingDone();
+                  if (!mounted) return;
+                  setState(() => _showOnboarding = false);
+                },
+                child: Text('知道了',
+                    style: TextStyle(color: AppColors.textSub)),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

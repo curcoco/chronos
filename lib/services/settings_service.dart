@@ -13,6 +13,8 @@ class SettingsService {
   static const String _kWeatherCity = 'weather_city';
   static const String _kGreeting = 'greeting';
   static const String _kThemeMode = 'theme_mode';
+  static const String _kOnboardingDone = 'onboarding_done';
+  static const String _kLastBackupAt = 'last_backup_at';
 
   /// 全局主题模式通知源:切换后 MaterialApp 监听并即时重建(无需重启)。
   final ValueNotifier<ThemeMode> themeMode =
@@ -101,4 +103,26 @@ class SettingsService {
         ThemeMode.dark => 'dark',
         ThemeMode.system => 'system',
       };
+
+  /// 首次引导卡是否已展示(用户关闭后不再出现)。
+  Future<bool> isOnboardingDone() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_kOnboardingDone) ?? false;
+  }
+
+  Future<void> setOnboardingDone() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kOnboardingDone, true);
+  }
+
+  /// 上次成功导出备份的时间(ISO 8601);从未导出为 null。
+  Future<String?> lastBackupAt() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_kLastBackupAt);
+  }
+
+  Future<void> markBackupExported(DateTime time) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kLastBackupAt, time.toIso8601String());
+  }
 }

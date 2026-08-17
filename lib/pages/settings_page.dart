@@ -25,6 +25,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   String _version = '';
   UpdateStatus? _status; // null = 检查中/未检查
+  String? _lastBackupAt; // 上次成功导出备份的时间
 
   @override
   void initState() {
@@ -34,8 +35,12 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _init() async {
     final v = await AppInfo.installedVersion();
+    final lastBackup = await SettingsService.instance.lastBackupAt();
     if (!mounted) return;
-    setState(() => _version = v);
+    setState(() {
+      _version = v;
+      _lastBackupAt = lastBackup;
+    });
     await _check();
   }
 
@@ -54,7 +59,11 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() => _exporting = true);
     try {
       final path = await BackupService.instance.exportZip();
+      // 记录上次备份时间,用于「上次备份于 X 天前」提醒。
+      final now = DateTime.now();
+      await SettingsService.instance.markBackupExported(now);
       if (!mounted) return;
+      setState(() => _lastBackupAt = now.toIso8601String());
       showFrostedSnack(context, '已导出备份到:$path');
       // 顺手唤起系统分享,方便直接发送/另存到网盘或换机
       await Share.shareXFiles([XFile(path)], subject: 'Chronos 数据备份');
@@ -298,6 +307,10 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (_lastBackupAt != null) ...[
+                  _backupTimeRow(_lastBackupAt!),
+                  const SizedBox(height: 12),
+                ],
                 Text(
                   '导出本地数据',
                   style: TextStyle(
@@ -394,6 +407,42 @@ class _SettingsPageState extends State<SettingsPage> {
                   size: 20, color: AppColors.textSub),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ApiSettingsPage()),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 「上次备份于 X 天前」提醒行:数据是用户的心血,让备份入口看得见。
+  Widget _backupTimeRow(String iso) {
+    final time = DateTime.tryParse(iso);
+    if (time == null) return const SizedBox.shrink();
+    final days = DateTime.now().difference(time).inDays;
+    final String label = switch (days) {
+      < 1 => '上次备份:今天',
+      == 1 => '上次备份:昨天',
+      _ => '上次备份:$days 天前',
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.primaryLight.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.history_rounded, size: 16, color: AppColors.primaryDark),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              days >= 7 ? '$label,建议尽快导出一次' : label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primaryDark,
               ),
             ),
           ),

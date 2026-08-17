@@ -28,6 +28,10 @@ class _LedgerPageState extends State<LedgerPage> {
   int _detailOffset = 0;
   int _calOffset = 0;
   String? _calDayKey;
+
+  /// 明细 Tab 分批渲染:一次最多构建这么多行,底部「加载更多」递增。
+  /// 记账流水会逐年累积,避免一次性构建全部行导致长列表卡顿。
+  int _detailLimit = 50;
   final TextEditingController _catCtrl = TextEditingController();
   final TextEditingController _startCtrl = TextEditingController();
   final TextEditingController _budgetCtrl = TextEditingController();
@@ -302,24 +306,54 @@ class _LedgerPageState extends State<LedgerPage> {
       groups.putIfAbsent(t.date, () => []).add(t);
     }
 
+    // 分批渲染:先构建前 _detailLimit 行,超出部分由「加载更多」递增。
+    final rows = <Widget>[header];
+    var shown = 0;
+    outer:
+    for (final entry in groups.entries) {
+      if (shown >= _detailLimit) break;
+      rows.add(Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 2),
+        child: Text(
+          _dateLabel(entry.key),
+          style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSub),
+        ),
+      ));
+      for (final t in entry.value) {
+        if (shown >= _detailLimit) break outer;
+        rows.add(_txnRow(t));
+        shown++;
+      }
+    }
+
+    final remaining = list.length - shown;
+    if (remaining > 0) {
+      rows.add(Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(40),
+              foregroundColor: AppColors.primaryDark,
+              side: BorderSide(
+                  color: AppColors.primary.withValues(alpha: 0.5)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+            ),
+            onPressed: () => setState(() => _detailLimit += 50),
+            child: Text('加载更多(剩余 $remaining 条)'),
+          ),
+        ),
+      ));
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        header,
-        for (final entry in groups.entries) ...[
-          Padding(
-            padding: const EdgeInsets.only(top: 8, bottom: 2),
-            child: Text(
-              _dateLabel(entry.key),
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSub),
-            ),
-          ),
-          for (final t in entry.value) _txnRow(t),
-        ],
-      ],
+      children: rows,
     );
   }
 
