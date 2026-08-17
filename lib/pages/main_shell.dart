@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../services/app_info.dart';
@@ -209,11 +211,34 @@ class _AppDrawerState extends State<_AppDrawer> {
 
   @override
   Widget build(BuildContext context) {
+    // 水玻璃侧边栏:整体半透明 + BackdropFilter 背景模糊,露出背后页面。
+    // 明暗主题下用不同色调的半透明底色;子元素(导航按钮等)用更浅的
+    // 磨砂玻璃层叠,形成层次。
     return Drawer(
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: ClipRRect(
+        borderRadius:
+            const BorderRadius.horizontal(right: Radius.circular(24)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDarkMode
+                  ? const Color(0xE6172330)
+                  : const Color(0xE6FFFFFF),
+              border: Border(
+                right: BorderSide(
+                  color: isDarkMode
+                      ? Colors.white.withValues(alpha: 0.10)
+                      : Colors.white.withValues(alpha: 0.6),
+                ),
+              ),
+            ),
+            child: SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
             // 应用信息头部(渐变随明暗主题切换,深色下用低亮度同色系)
             Container(
               padding: const EdgeInsets.fromLTRB(20, 26, 20, 22),
@@ -285,7 +310,7 @@ class _AppDrawerState extends State<_AppDrawer> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Material(
-                color: AppColors.card,
+                color: _glassColor(),
                 borderRadius: BorderRadius.circular(14),
                 child: InkWell(
                   onTap: _editNickname,
@@ -364,6 +389,8 @@ class _AppDrawerState extends State<_AppDrawer> {
                     fontWeight: FontWeight.w600,
                     color: AppColors.textMain),
               ),
+              // 磨砂玻璃导航按钮
+              tileColor: _glassColor(),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
               onTap: () {
@@ -389,6 +416,8 @@ class _AppDrawerState extends State<_AppDrawer> {
               ),
               trailing: Icon(Icons.chevron_right_rounded,
                   size: 20, color: AppColors.textSub),
+              // 磨砂玻璃导航按钮
+              tileColor: _glassColor(),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
               onTap: _openSettings,
@@ -401,11 +430,19 @@ class _AppDrawerState extends State<_AppDrawer> {
                 style: TextStyle(fontSize: 11, color: AppColors.textSub),
               ),
             ),
-          ],
+              ],
+            ),
+          ),
         ),
+      ),
       ),
     );
   }
+
+  /// 磨砂玻璃底色:随明暗主题适配的半透明白/蓝灰,用于抽屉内卡片与导航按钮。
+  Color _glassColor() => isDarkMode
+      ? const Color(0xFF243342).withValues(alpha: 0.5)
+      : Colors.white.withValues(alpha: 0.5);
 
   Widget _navTile(int index, IconData icon, String label) {
     final selected = widget.currentIndex == index;
@@ -422,7 +459,9 @@ class _AppDrawerState extends State<_AppDrawer> {
         ),
       ),
       selected: selected,
-      selectedTileColor: AppColors.primaryLight.withValues(alpha: 0.4),
+      // 磨砂玻璃导航按钮:半透明底色,选中态用主题色提亮
+      tileColor: _glassColor(),
+      selectedTileColor: AppColors.primaryLight.withValues(alpha: 0.45),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onTap: () => widget.onSelectTab(index),
     );
@@ -633,8 +672,12 @@ class _UpdateBannerState extends State<_UpdateBanner> {
 
   @override
   Widget build(BuildContext context) {
+    final bool dark = Theme.of(context).brightness == Brightness.dark;
     return Material(
-      color: AppColors.card,
+      // 磨砂玻璃卡片:半透明白/蓝灰,与抽屉水玻璃背景层叠
+      color: dark
+          ? const Color(0xFF243342).withValues(alpha: 0.5)
+          : Colors.white.withValues(alpha: 0.5),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: _downloading ? null : _download,
