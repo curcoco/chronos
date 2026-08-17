@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../routes.dart';
 import '../theme.dart';
 import '../widgets/module_card.dart';
 import 'english_page.dart';
@@ -40,9 +41,7 @@ class KnowledgePage extends StatelessWidget {
                   icon: Icons.translate_rounded,
                   title: '英文积累',
                   desc: '每日一句 / 单词 / 阅读 / 写作,可收藏,打卡领金币',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const EnglishPage()),
-                  ),
+                  onTap: () => AppRoutes.push(context, const EnglishPage()),
                 ),
               ],
             ),

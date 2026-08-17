@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../routes.dart';
 import '../theme.dart';
 import '../widgets/module_card.dart';
 import 'chat_page.dart';
@@ -43,36 +44,28 @@ class LifePage extends StatelessWidget {
                   icon: Icons.favorite_rounded,
                   title: '健康管理',
                   desc: '厨房秘籍 / 智能食谱 / 运动打卡 / 热力图',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const HealthPage()),
-                  ),
+                  onTap: () => AppRoutes.push(context, const HealthPage()),
                 ),
                 const SizedBox(height: 12),
                 ModuleCard(
                   icon: Icons.task_alt_rounded,
                   title: '每日复盘',
                   desc: '完成进度 / 问题卡点 / 明日方案,历史复盘留存',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ReviewPage()),
-                  ),
+                  onTap: () => AppRoutes.push(context, const ReviewPage()),
                 ),
                 const SizedBox(height: 12),
                 ModuleCard(
                   icon: Icons.forum_rounded,
                   title: '零时闲话铺',
                   desc: '和 AI 掌柜聊天,可语音朗读(需配置 API)',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ChatPage()),
-                  ),
+                  onTap: () => AppRoutes.push(context, const ChatPage()),
                 ),
                 const SizedBox(height: 12),
                 ModuleCard(
                   icon: Icons.account_balance_wallet_rounded,
                   title: '生活记账',
                   desc: '收支流水 / 日历 / 图表 / 预算,纯本地',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const LedgerPage()),
-                  ),
+                  onTap: () => AppRoutes.push(context, const LedgerPage()),
                 ),
               ],
             ),

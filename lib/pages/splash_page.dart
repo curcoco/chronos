@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/daily_content.dart';
+import '../routes.dart';
 import '../services/settings_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
@@ -143,9 +144,7 @@ class _SplashPageState extends State<SplashPage> {
                 const Spacer(flex: 3),
                 FilledButton(
                   onPressed: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const MainShell()),
-                    );
+                    AppRoutes.pushReplacement(context, const MainShell());
                   },
                   child: const Text('开始今天 →'),
                 ),
@@ -155,12 +154,8 @@ class _SplashPageState extends State<SplashPage> {
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const QuickNotePage(),
-                          fullscreenDialog: true,
-                        ),
-                      );
+                      AppRoutes.push(context, const QuickNotePage(),
+                          dialog: true);
                     },
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size.fromHeight(48),

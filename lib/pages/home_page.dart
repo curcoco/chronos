@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/cities.dart';
 import '../data/daily_content.dart';
 import '../models/student_task.dart';
+import '../routes.dart';
 import '../services/coin_service.dart';
 import '../services/note_service.dart';
 import '../services/settings_service.dart';
@@ -171,23 +172,17 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openCoinCenter() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const CoinCenterPage()),
-    );
+    await AppRoutes.push(context, const CoinCenterPage());
     await _reload();
   }
 
   Future<void> _openDiary() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const DiaryPage()),
-    );
+    await AppRoutes.push(context, const DiaryPage());
     await _reload();
   }
 
   Future<void> _openApiSettings() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ApiSettingsPage()),
-    );
+    await AppRoutes.push(context, const ApiSettingsPage());
   }
 
   Future<void> _closeOnboarding() async {

@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../routes.dart';
 import '../services/app_info.dart';
 import '../services/backup_service.dart';
 import '../services/settings_service.dart';
@@ -110,10 +111,7 @@ class _SettingsPageState extends State<SettingsPage> {
       // 恢复后重建到启动页,让所有页面用新数据重新加载(等提示看得见再跳)。
       await Future<void>.delayed(const Duration(milliseconds: 900));
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const SplashPage()),
-        (route) => false,
-      );
+      AppRoutes.pushAndRemoveUntil(context, const SplashPage());
     } catch (e) {
       if (!mounted) return;
       final msg = e is FormatException ? e.message : '$e';
@@ -405,9 +403,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               trailing: Icon(Icons.chevron_right_rounded,
                   size: 20, color: AppColors.textSub),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ApiSettingsPage()),
-              ),
+              onTap: () => AppRoutes.push(context, const ApiSettingsPage()),
             ),
           ),
         ],

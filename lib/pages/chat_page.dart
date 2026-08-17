@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/api_config.dart';
+import '../routes.dart';
 import '../services/eleven_service.dart';
 import '../services/llm_service.dart';
 import '../services/memory_service.dart';
@@ -131,9 +132,7 @@ class _ChatPageState extends State<ChatPage> {
 
   /// 打开 API 配置页,返回后刷新配置状态
   Future<void> _openApiSettings() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ApiSettingsPage()),
-    );
+    await AppRoutes.push(context, const ApiSettingsPage());
     final llmOk = await LlmService.instance.isConfigured();
     if (!mounted) return;
     setState(() => _llmOk = llmOk);
@@ -290,9 +289,7 @@ class _ChatPageState extends State<ChatPage> {
         actions: [
           IconButton(
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MemoryPage()),
-              );
+              AppRoutes.push(context, const MemoryPage());
             },
             icon: const Icon(Icons.psychology_rounded, size: 20),
             tooltip: 'AI 长期记忆',

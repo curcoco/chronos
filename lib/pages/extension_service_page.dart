@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../routes.dart';
 import '../services/key_store.dart';
 import '../theme.dart';
 import '../widgets/frosted_snack.dart';
@@ -266,9 +267,7 @@ class _SecretUnlockTapState extends State<SecretUnlockTap> {
     );
     if (!mounted) return;
     if (ok == true) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ExtensionServicePage()),
-      );
+      AppRoutes.push(context, const ExtensionServicePage());
     } else if (ok == false) {
       showFrostedSnack(context, '密码不正确');
     }

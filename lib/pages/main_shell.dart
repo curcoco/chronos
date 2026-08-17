@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../routes.dart';
 import '../theme.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/bottom_nav.dart';
@@ -54,9 +55,7 @@ class _MainShellState extends State<MainShell> {
         }
 
         void push(Widget page, {bool dialog = false}) {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => page, fullscreenDialog: dialog),
-          );
+          AppRoutes.push(context, page, dialog: dialog);
         }
 
         return SafeArea(

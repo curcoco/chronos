@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/note.dart';
+import '../routes.dart';
 import '../services/note_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
@@ -97,9 +98,7 @@ class _NoteHistoryPageState extends State<NoteHistoryPage> {
       _toggleSelect(note);
       return;
     }
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => NoteDetailPage(note: note)),
-    );
+    await AppRoutes.push(context, NoteDetailPage(note: note));
     await _load(); // 详情页删除后刷新
   }
 

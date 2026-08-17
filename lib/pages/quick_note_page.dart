@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/note.dart';
+import '../routes.dart';
 import '../services/note_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
@@ -96,9 +97,7 @@ class _QuickNotePageState extends State<QuickNotePage> {
   }
 
   Future<void> _openDetail(Note note) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => NoteDetailPage(note: note)),
-    );
+    await AppRoutes.push(context, NoteDetailPage(note: note));
     await _load(); // 详情页删除/收藏后刷新
   }
 
@@ -142,9 +141,7 @@ class _QuickNotePageState extends State<QuickNotePage> {
         actions: [
           IconButton(
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const DiaryPage()),
-              );
+              AppRoutes.push(context, const DiaryPage());
             },
             icon: const Icon(Icons.menu_book_rounded, size: 20),
             tooltip: '日记',
@@ -183,10 +180,7 @@ class _QuickNotePageState extends State<QuickNotePage> {
                   ),
                   TextButton(
                     onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const NoteHistoryPage()),
-                      );
+                      AppRoutes.push(context, const NoteHistoryPage());
                     },
                     style: TextButton.styleFrom(
                       visualDensity: VisualDensity.compact,

@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../routes.dart';
 import '../services/app_info.dart';
 import '../services/settings_service.dart';
 import '../services/update_installer.dart';
@@ -89,9 +90,7 @@ class _AppDrawerState extends State<AppDrawer> {
 
   void _openSettings() {
     Navigator.of(context).pop(); // 先关抽屉
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SettingsPage()),
-    );
+    AppRoutes.push(context, const SettingsPage());
   }
 
   @override
@@ -279,12 +278,8 @@ class _AppDrawerState extends State<AppDrawer> {
                         borderRadius: BorderRadius.circular(12)),
                     onTap: () {
                       Navigator.of(context).pop(); // 先关抽屉
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const QuickNotePage(),
-                          fullscreenDialog: true,
-                        ),
-                      );
+                      AppRoutes.push(context, const QuickNotePage(),
+                          dialog: true);
                     },
                   ),
                   const Divider(height: 1),
