@@ -2,7 +2,7 @@ name: student_workbench
 description: "Chronos - 学生日常计划与金币激励应用"
 publish_to: 'none'
 
-version: 1.7.0+17
+version: 1.7.1+18
 
 environment:
   sdk: ^3.13.0

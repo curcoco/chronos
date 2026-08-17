@@ -18,7 +18,8 @@ if (hasReleaseKeystore) {
 
 android {
     namespace = "com.student.student_workbench"
-    compileSdk = flutter.compileSdkVersion
+    // file_picker 的传递依赖 flutter_plugin_android_lifecycle 要求 compileSdk>=36。
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

@@ -31,7 +31,7 @@ class AppInfo {
   AppInfo._();
 
   /// 离线兜底用的「最新版本」参照,每次发版时与 pubspec.yaml 的 version 同步更新。
-  static const String latestVersion = '1.7.0';
+  static const String latestVersion = '1.7.1';
 
   /// 更新检查地址:托管一个 HTTPS 可达的 latest.json,内容形如
   /// {"version":"1.2.0","note":"…","apk":"https://…/chronos-1.2.0.apk"}

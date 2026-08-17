@@ -12,6 +12,7 @@ import '../widgets/section_card.dart';
 import '../widgets/update_download_button.dart';
 import 'api_settings_page.dart';
 import 'extension_service_page.dart';
+import 'splash_page.dart';
 
 /// 系统设置:关于(应用名、简介)+ 版本号与更新状态
 class SettingsPage extends StatefulWidget {
@@ -91,8 +92,19 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final result = await BackupService.instance.restoreFromZip(path);
       if (!mounted) return;
+      // 备份里的主题模式等设置已写回 prefs,但内存中的 themeMode 仍是旧值,
+      // 重新载入让主题与恢复后的数据一致。
+      await SettingsService.instance.loadThemeMode();
+      if (!mounted) return;
       showFrostedSnack(context,
-          '恢复完成:数据库已导入,设置项 ${result.prefsRestored} 项。重启应用后全部生效。');
+          '恢复完成:数据库已导入,设置项 ${result.prefsRestored} 项。即将重启…');
+      // 恢复后重建到启动页,让所有页面用新数据重新加载(等提示看得见再跳)。
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const SplashPage()),
+        (route) => false,
+      );
     } catch (e) {
       if (!mounted) return;
       final msg = e is FormatException ? e.message : '$e';
