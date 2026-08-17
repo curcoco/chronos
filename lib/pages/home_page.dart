@@ -10,15 +10,21 @@ import '../services/task_service.dart';
 import '../services/weather_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
-import '../widgets/app_text_field.dart';
 import '../widgets/frosted_snack.dart';
-import '../widgets/section_card.dart';
+import '../widgets/home/home_coin_card.dart';
+import '../widgets/home/home_english_card.dart';
+import '../widgets/home/home_header.dart';
+import '../widgets/home/home_note_card.dart';
+import '../widgets/home/home_onboarding_card.dart';
+import '../widgets/home/home_today_card.dart';
+import '../widgets/home/home_weather_strip.dart';
 import '../widgets/task_confirm_dialog.dart';
 import 'api_settings_page.dart';
 import 'coin_center_page.dart';
 import 'diary_page.dart';
 
-/// 首页仪表盘:今日任务概览 / 灵感快捷速记 / 每日英语一句 / 金币入口
+/// 首页仪表盘:今日任务概览 / 灵感快捷速记 / 每日英语一句 / 金币入口。
+/// 各卡片 UI 拆到 widgets/home/ 下的独立组件,本页只负责状态加载与组装。
 class HomePage extends StatefulWidget {
   final VoidCallback? onGoPlan;
 
@@ -45,8 +51,6 @@ class _HomePageState extends State<HomePage> {
   String _dateLabel = '';
   String _week = '';
   ({String en, String zh}) _english = (en: '', zh: '');
-
-  int get _doneCount => _tasks.where((t) => t.done).length;
 
   @override
   void initState() {
@@ -173,6 +177,25 @@ class _HomePageState extends State<HomePage> {
     await _reload();
   }
 
+  Future<void> _openDiary() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const DiaryPage()),
+    );
+    await _reload();
+  }
+
+  Future<void> _openApiSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ApiSettingsPage()),
+    );
+  }
+
+  Future<void> _closeOnboarding() async {
+    await SettingsService.instance.setOnboardingDone();
+    if (!mounted) return;
+    setState(() => _showOnboarding = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -184,472 +207,53 @@ class _HomePageState extends State<HomePage> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                 children: [
-                  _buildHeader(),
+                  HomeHeader(
+                    dateLabel: _dateLabel,
+                    week: _week,
+                    quote: _quote,
+                    nickname: _nickname,
+                    onOpenDrawer: () => Scaffold.of(context).openDrawer(),
+                  ),
                   if (_showOnboarding) ...[
                     const SizedBox(height: 12),
-                    _buildOnboardingCard(),
+                    HomeOnboardingCard(
+                      onClose: _closeOnboarding,
+                      onOpenApiSettings: _openApiSettings,
+                    ),
                   ],
                   if (_weather != null) ...[
                     const SizedBox(height: 12),
-                    _buildWeatherStrip(),
+                    HomeWeatherStrip(
+                      city: _weather!.city,
+                      text: _weather!.text,
+                      temp: _weather!.temp,
+                      onTap: _pickCity,
+                    ),
                   ],
                   const SizedBox(height: 16),
-                  _buildCoinCard(),
+                  HomeCoinCard(
+                    coin: _coin,
+                    todayEarned: _todayEarned,
+                    onTap: _openCoinCenter,
+                  ),
                   const SizedBox(height: 16),
-                  _buildTodayCard(),
+                  HomeTodayCard(
+                    tasks: _tasks,
+                    onGoPlan: widget.onGoPlan,
+                    onToggleTask: _toggleTask,
+                  ),
                   const SizedBox(height: 16),
-                  _buildNoteCard(),
+                  HomeNoteCard(
+                    controller: _noteCtrl,
+                    saving: _savingNote,
+                    onSubmit: _saveNote,
+                    onOpenDiary: _openDiary,
+                  ),
                   const SizedBox(height: 16),
-                  _buildEnglishCard(),
+                  HomeEnglishCard(en: _english.en, zh: _english.zh),
                 ],
               ),
             ),
-    );
-  }
-
-  /// 首次引导卡:离线功能开箱即用;联网功能(天气/AI 聊天/更新)需在
-  /// 「系统设置 → API 配置」填写 key。关闭后不再出现(存本地标记)。
-  Widget _buildOnboardingCard() {
-    return SectionCard(
-      title: '欢迎使用 Chronos',
-      trailing: IconButton(
-        onPressed: () async {
-          await SettingsService.instance.setOnboardingDone();
-          if (!mounted) return;
-          setState(() => _showOnboarding = false);
-        },
-        icon: Icon(Icons.close_rounded, size: 18, color: AppColors.textSub),
-        tooltip: '关闭',
-        visualDensity: VisualDensity.compact,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '计划 / 金币 / 灵感 / 记账等全部功能离线可用,数据只存本机。',
-            style: TextStyle(fontSize: 13, height: 1.5, color: AppColors.textMain),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '天气与 AI 聊天需联网:在「系统设置 → API 配置」填入你的 key 即可。',
-            style: TextStyle(fontSize: 12, height: 1.5, color: AppColors.textSub),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              FilledButton.tonal(
-                style: FilledButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  backgroundColor: AppColors.primaryLight,
-                  foregroundColor: AppColors.primaryDark,
-                ),
-                onPressed: () async {
-                  await Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const ApiSettingsPage()),
-                  );
-                },
-                child: const Text('去配置 API'),
-              ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () async {
-                  await SettingsService.instance.setOnboardingDone();
-                  if (!mounted) return;
-                  setState(() => _showOnboarding = false);
-                },
-                child: Text('知道了',
-                    style: TextStyle(color: AppColors.textSub)),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '$_dateLabel $_week',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textMain,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '「$_quote」',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                  color: AppColors.primaryDark.withValues(alpha: 0.8),
-                ),
-              ),
-            ],
-          ),
-        ),
-        // 用户头像(点击开侧边栏;暂不支持自定义头像)
-        GestureDetector(
-          onTap: () => Scaffold.of(context).openDrawer(),
-          child: CircleAvatar(
-            radius: 19,
-            backgroundColor: AppColors.primaryLight,
-            child: Text(
-              _nickname.isEmpty ? '?' : _nickname.substring(0, 1),
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primaryDark,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// 天气条(点击选择城市;下拉刷新也会更新天气)
-  Widget _buildWeatherStrip() {
-    final w = _weather!;
-    return InkWell(
-      onTap: _pickCity,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.line),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.wb_sunny_rounded,
-                size: 18, color: Color(0xFFFFB300)),
-            const SizedBox(width: 8),
-            Text(w.city, style: const TextStyle(fontSize: 13)),
-            const SizedBox(width: 10),
-            Text(w.text,
-                style:
-                    TextStyle(fontSize: 13, color: AppColors.textSub)),
-            const Spacer(),
-            Text(
-              '${w.temp}℃',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primaryDark),
-            ),
-            const SizedBox(width: 4),
-            Icon(Icons.keyboard_arrow_down_rounded,
-                size: 18, color: AppColors.textSub),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCoinCard() {
-    return InkWell(
-      onTap: _openCoinCenter,
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.primaryLight, AppColors.primary],
-          ),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.stars_rounded,
-                  color: Color(0xFFFFB300), size: 28),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '金币余额',
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFFE3F4FF),
-                        fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '$_coin 枚',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '今日已赚 $_todayEarned/${CoinService.dailyCap}',
-                  style: const TextStyle(
-                      fontSize: 12, color: Color(0xFFE3F4FF)),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '心愿兑换 ›',
-                  style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTodayCard() {
-    final total = _tasks.length;
-    final done = _doneCount;
-    final progress = total == 0 ? 0.0 : done / total;
-    return SectionCard(
-      title: '今日任务',
-      trailing: TextButton(
-        onPressed: widget.onGoPlan,
-        child: Text('查看全部 ›',
-            style: TextStyle(fontSize: 13, color: AppColors.primaryDark)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                '已完成 $done/$total',
-                style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w600),
-              ),
-              const Spacer(),
-              Text(
-                '${(progress * 100).round()}%',
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primaryDark),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 8,
-              backgroundColor: AppColors.line,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (total == 0)
-            Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text('今天还没有任务,去计划中心添加吧~',
-                  style: TextStyle(color: AppColors.textSub)),
-            )
-          else ...[
-            // 固定展示至多 3 条;溢出时卡片内部可上滑查看全部。
-            if (_tasks.length > 3)
-              SizedBox(
-                height: 120, // 3 行高度,溢出部分卡片内上滑查看
-                child: ListView(
-                  physics: const BouncingScrollPhysics(),
-                  children: [for (final task in _tasks) _taskTile(task)],
-                ),
-              )
-            else
-              for (final task in _tasks) _taskTile(task),
-            if (done == total)
-              Padding(
-                padding: EdgeInsets.only(top: 6),
-                child: Text('今日任务全部完成,太棒了!',
-                    style: TextStyle(
-                        color: AppColors.primaryDark,
-                        fontWeight: FontWeight.w600)),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _taskTile(StudentTask task) {
-    // 已完成的任务不支持任何操作:整行不可点击。
-    return InkWell(
-      onTap: task.done ? null : () => _toggleTask(task),
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 7),
-        child: Row(
-          children: [
-            Icon(
-              task.done
-                  ? Icons.check_circle_rounded
-                  : Icons.radio_button_unchecked_rounded,
-              color: task.done ? AppColors.primary : const Color(0xFFB9CBD9),
-              size: 24,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                task.title,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: task.done ? AppColors.textSub : AppColors.textMain,
-                  decoration: task.done ? TextDecoration.lineThrough : null,
-                ),
-              ),
-            ),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: categoryColor(task.category).withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                task.category,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: categoryColor(task.category),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNoteCard() {
-    return SectionCard(
-      title: '灵感速记',
-      trailing: TextButton.icon(
-        onPressed: () async {
-          await Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const DiaryPage()),
-          );
-          await _reload();
-        },
-        icon: Icon(Icons.menu_book_rounded,
-            size: 16, color: AppColors.primaryDark),
-        label: Text('写日记',
-            style: TextStyle(fontSize: 13, color: AppColors.primaryDark)),
-        style: TextButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '碎片灵感随手记;想写成篇的心情日记点右上角',
-            style: TextStyle(fontSize: 11, color: AppColors.textSub),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: AppTextField(
-                  controller: _noteCtrl,
-                  maxLength: 80,
-                  hintText: '记下一句话灵感…',
-                  onSubmit: _saveNote,
-                ),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 52,
-                height: 46,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(52, 46),
-                    shape: const CircleBorder(),
-                  ),
-                  onPressed: _savingNote ? null : _saveNote,
-                  child: _savingNote
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Icon(Icons.send_rounded, size: 20),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEnglishCard() {
-    return SectionCard(
-      title: '每日英语一句',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _english.en,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            _english.zh,
-            style: TextStyle(fontSize: 13, color: AppColors.textSub),
-          ),
-        ],
-      ),
     );
   }
 }
