@@ -9,7 +9,7 @@ class DbHelper {
   static final DbHelper instance = DbHelper._();
 
   /// 当前数据库版本(结构变更时递增)
-  static const int dbVersion = 10;
+  static const int dbVersion = 11;
 
   Database? _db;
 
@@ -128,6 +128,27 @@ class DbHelper {
     // SQLite 无法直接删除列约束,需重建表并迁移数据。
     if (oldVersion < 10) {
       await _migrateDiaryDropUnique(db);
+    }
+    // v11:修复 notes 表缺列。历史上 _onCreate(全新安装)漏建了 favorite/mood 两列,
+    // 而 addNote(mood: ...) 会写入 mood 列 → 全新装机的用户保存灵感时因
+    // "no column named mood" 静默失败(灵感速记无法保存)。这里按列存在性补齐,
+    // 已有该列的升级用户不受影响。
+    if (oldVersion < 11) {
+      await _ensureNotesColumns(db);
+    }
+  }
+
+  /// 确保 notes 表含 favorite / mood 列(缺则补;已有则跳过,避免重复列报错)。
+  static Future<void> _ensureNotesColumns(Database db) async {
+    final cols = await db.rawQuery('PRAGMA table_info(notes)');
+    if (cols.isEmpty) return; // notes 表不存在(理论上不会发生),不处理。
+    final names = cols.map((c) => c['name'] as String).toSet();
+    if (!names.contains('favorite')) {
+      await db.execute(
+          'ALTER TABLE notes ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!names.contains('mood')) {
+      await db.execute('ALTER TABLE notes ADD COLUMN mood TEXT');
     }
   }
 
@@ -264,7 +285,9 @@ class DbHelper {
       CREATE TABLE notes(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         content TEXT NOT NULL,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        favorite INTEGER NOT NULL DEFAULT 0,
+        mood TEXT
       )
     ''');
 

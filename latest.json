@@ -1,5 +1,5 @@
 {
-  "version": "1.7.1",
-  "note": "灵感速记页改为换行输入框(回车换行,点发送保存),首页速记框仍为快速提交;本周计划/长期目标的编辑、删除改为左滑操作,与灵感速记一致;新增「从备份 zip 恢复」并在恢复后自动重启到启动页,方便换机迁移;全应用删除确认弹窗统一样式",
-  "apk": "https://github.com/curcoco/chronos/releases/download/v1.7.1/chronos-1.7.1.apk"
+  "version": "1.7.2",
+  "note": "修复全新安装用户灵感速记无法保存的问题(数据库 notes 表补齐 favorite/mood 列),保存失败时给出明确提示;多个底部提示不再排队、始终即时显示最新一条;此前的换行输入框、计划左滑、从备份 zip 恢复(恢复后自动重启)等继续可用",
+  "apk": "https://github.com/curcoco/chronos/releases/download/v1.7.2/chronos-1.7.2.apk"
 }

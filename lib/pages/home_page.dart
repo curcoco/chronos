@@ -155,6 +155,8 @@ class _HomePageState extends State<HomePage> {
       _noteCtrl.clear();
       await _reload();
       _showSnack('已同步到灵感专区');
+    } catch (e) {
+      _showSnack('保存失败:$e');
     } finally {
       if (mounted) setState(() => _savingNote = false);
     }

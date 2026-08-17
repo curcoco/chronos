@@ -3,6 +3,9 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 /// 磨砂玻璃提示条:半透明 + 背景模糊(BackdropFilter),随明暗主题适配。
+///
+/// 不排队:显示前先移除当前提示,多次触发时始终只展示最新一条,
+/// 避免多个提示排队依次弹出。
 void showFrostedSnack(BuildContext context, String message) {
   final bool dark = Theme.of(context).brightness == Brightness.dark;
   final Color glass = dark
@@ -13,7 +16,10 @@ void showFrostedSnack(BuildContext context, String message) {
       : Colors.white.withValues(alpha: 0.7);
   final Color textColor =
       dark ? const Color(0xFFE7EEF5) : const Color(0xFF1F2D3D);
-  ScaffoldMessenger.of(context).showSnackBar(
+  final messenger = ScaffoldMessenger.of(context);
+  // 立即移除正在展示/排队的提示,让最新一条即时显示(不排队)。
+  messenger.removeCurrentSnackBar();
+  messenger.showSnackBar(
     SnackBar(
       behavior: SnackBarBehavior.floating,
       backgroundColor: Colors.transparent,
@@ -64,7 +70,8 @@ void showUndoSnack(
   final Color actionColor =
       dark ? const Color(0xFF4FC3F7) : const Color(0xFF0288D1);
   final messenger = ScaffoldMessenger.of(context);
-  messenger.hideCurrentSnackBar();
+  // 不排队:立即移除当前/排队的提示,让撤销提示即时显示。
+  messenger.removeCurrentSnackBar();
   messenger.showSnackBar(
     SnackBar(
       behavior: SnackBarBehavior.floating,

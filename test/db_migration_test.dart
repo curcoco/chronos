@@ -33,8 +33,7 @@ void main() {
     return db;
   }
 
-  group('DB 迁移 v9 → v10', () {
-    test('迁移保留既有数据', () async {
+  group('DB 迁移 v9 → v10', () {    test('迁移保留既有数据', () async {
       final db = await openV9WithDiary();
       await db.insert('diary_entries', {
         'content': '旧日记',
@@ -79,8 +78,74 @@ void main() {
     });
   });
 
-  group('模型 <-> Map 往返', () {
-    test('DiaryEntry toMap/fromMap 一致', () {
+  group('DB 迁移 v11:补齐 notes 缺失的 favorite/mood 列', () {
+    /// 造一个"全新安装漏建列"的旧 notes 表:只有 id/content/created_at。
+    Future<Database> openNotesMissingCols(int version) async {
+      final db = await databaseFactory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(version: version),
+      );
+      await db.execute('''
+        CREATE TABLE notes(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          content TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        )
+      ''');
+      return db;
+    }
+
+    test('迁移前写入 mood 会失败,迁移后补列可成功保存', () async {
+      final db = await openNotesMissingCols(10);
+
+      // 迁移前:插入含 mood 的行应抛错(复现"灵感速记保存失败")。
+      await expectLater(
+        db.insert('notes',
+            {'content': '灵感', 'created_at': 1, 'mood': 'happy'}),
+        throwsA(anything),
+      );
+
+      await DbHelper.runMigrations(db, 10, DbHelper.dbVersion);
+
+      // 迁移后:favorite/mood 列已补齐,保存成功。
+      final id = await db.insert('notes', {
+        'content': '灵感',
+        'created_at': 2,
+        'favorite': 1,
+        'mood': 'happy',
+      });
+      expect(id, greaterThan(0));
+
+      final rows = await db.query('notes', where: 'id = ?', whereArgs: [id]);
+      expect(rows.first['mood'], 'happy');
+      expect(rows.first['favorite'], 1);
+      await db.close();
+    });
+
+    test('已含列的库再次迁移不报错(幂等)', () async {
+      final db = await databaseFactory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(version: 10),
+      );
+      await db.execute('''
+        CREATE TABLE notes(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          content TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          favorite INTEGER NOT NULL DEFAULT 0,
+          mood TEXT
+        )
+      ''');
+      // 不应因列已存在而抛错。
+      await DbHelper.runMigrations(db, 10, DbHelper.dbVersion);
+      final cols = await db.rawQuery('PRAGMA table_info(notes)');
+      final names = cols.map((c) => c['name'] as String).toSet();
+      expect(names.containsAll({'favorite', 'mood'}), isTrue);
+      await db.close();
+    });
+  });
+
+  group('模型 <-> Map 往返', () {    test('DiaryEntry toMap/fromMap 一致', () {
       const e = DiaryEntry(
         content: '内容',
         mood: 'calm',

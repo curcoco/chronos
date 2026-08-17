@@ -87,6 +87,9 @@ class _QuickNotePageState extends State<QuickNotePage> {
       _focusNode.requestFocus();
       await _load();
       _showSnack('已保存到灵感专区');
+    } catch (e) {
+      // 之前保存失败是静默的(如 DB 缺列),这里显式反馈,避免"点了没反应"。
+      _showSnack('保存失败:$e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
