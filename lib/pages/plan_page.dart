@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../data/daily_content.dart';
 import '../models/plan_item.dart';
 import '../models/student_task.dart';
 import '../services/task_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
 import '../widgets/add_task_sheet.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/frosted_snack.dart';
 import '../widgets/plan_list_view.dart';
 import '../widgets/random_task_sheet.dart';
@@ -105,111 +105,20 @@ class _PlanPageState extends State<PlanPage> {
     }
   }
 
-  /// 删除任务前弹窗:删除 / 系统随机生成同等优先级的任务
-  /// 今日任务最少 3 条:只剩 3 条时不允许直接删除,只能「系统随机生成」替换或取消。
-  Future<void> _confirmDeleteOrReplace(StudentTask task) async {
-    // 保底 3 条:只能随机替换或取消
-    if (_tasks.length <= 3) {
-      final replace = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('今日任务至少保留三条'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('系统随机生成'),
-            ),
-          ],
-        ),
-      );
-      if (replace != true || !mounted) return;
-      await _replaceWithRandom(task);
-      return;
-    }
-
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: AppColors.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.delete_outline_rounded,
-                  color: Color(0xFFE53935)),
-              title: const Text('删除该任务'),
-              onTap: () => Navigator.of(context).pop('delete'),
-            ),
-            ListTile(
-              leading: Icon(Icons.casino_rounded,
-                  color: AppColors.primaryDark),
-              title: const Text('随机换一个'),
-              subtitle: const Text('系统随机生成同等优先级的任务'),
-              onTap: () => Navigator.of(context).pop('replace'),
-            ),
-            const Divider(height: 1),
-            ListTile(
-              title: Center(
-                child: Text('取消',
-                    style: TextStyle(color: AppColors.textSub)),
-              ),
-              onTap: () => Navigator.of(context).pop(),
-            ),
-          ],
-        ),
-      ),
+  /// 取消任务:从今日清单移除(不再展示)。已完成的任务不支持任何操作,
+  /// 因此这里只处理未完成任务。取消后不保留历史记录。
+  Future<void> _confirmCancelTask(StudentTask task) async {
+    final ok = await showConfirmDialog(
+      context,
+      title: '取消该任务?',
+      message: '「${task.title}」将从今日清单移除,不再展示。',
+      confirmText: '取消任务',
+      destructive: true,
     );
-    if (choice == null || !mounted) return;
-    if (choice == 'delete') {
-      await _taskService.deleteTask(task.id!);
-      await _load();
-      _showSnack('已删除任务');
-    } else {
-      final exclude = _tasks.map((t) => t.title).toSet();
-      final t = DailyContent.randomAutoTask(exclude: exclude);
-      await _taskService.addTask(
-        title: t.title,
-        category: t.category,
-        priority: task.priority,
-        date: todayStr(),
-        auto: true,
-      );
-      await _taskService.deleteTask(task.id!);
-      await _load();
-      _showSnack('已随机换成同等优先级的任务');
-    }
-  }
-
-  /// 保底 3 条时的替换:弹随机任务弹层,优先级可「我来自选」或「系统随机」
-  Future<void> _replaceWithRandom(StudentTask task) async {
-    final result = await showModalBottomSheet<AddTaskResult>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) =>
-          RandomTaskSheet(excludeTitles: _tasks.map((t) => t.title).toSet()),
-    );
-    if (result == null || !mounted) return;
-    await _taskService.addTask(
-      title: result.title,
-      category: result.category,
-      priority: result.priority,
-      date: todayStr(),
-      auto: true,
-    );
+    if (!ok || !mounted) return;
     await _taskService.deleteTask(task.id!);
     await _load();
-    _showSnack('已随机替换为一条新任务');
+    _showSnack('已取消该任务');
   }
 
   @override
@@ -384,6 +293,8 @@ class _PlanPageState extends State<PlanPage> {
   }
 
   Widget _taskTile(StudentTask task) {
+    // 已完成的任务不支持任何操作:勾选禁用、不显示取消按钮。
+    final completed = task.done;
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
@@ -395,7 +306,8 @@ class _PlanPageState extends State<PlanPage> {
               activeColor: AppColors.primary,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(5)),
-              onChanged: (_) => _toggleTask(task),
+              // 已完成 → 禁用,不可取消完成
+              onChanged: completed ? null : (_) => _toggleTask(task),
             ),
             Expanded(
               child: Column(
@@ -446,12 +358,13 @@ class _PlanPageState extends State<PlanPage> {
                 ],
               ),
             ),
-            IconButton(
-              onPressed: () => _confirmDeleteOrReplace(task),
-              icon: Icon(Icons.delete_outline_rounded,
-                  size: 20, color: AppColors.textSub),
-              tooltip: '删除 / 换一个',
-            ),
+            if (!completed)
+              IconButton(
+                onPressed: () => _confirmCancelTask(task),
+                icon: Icon(Icons.close_rounded,
+                    size: 20, color: AppColors.textSub),
+                tooltip: '取消任务',
+              ),
           ],
         ),
       ),

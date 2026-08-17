@@ -417,7 +417,17 @@ class _HomePageState extends State<HomePage> {
                   style: TextStyle(color: AppColors.textSub)),
             )
           else ...[
-            for (final task in _tasks) _taskTile(task),
+            // 固定展示至多 3 条;溢出时卡片内部可上滑查看全部。
+            if (_tasks.length > 3)
+              SizedBox(
+                height: 120, // 3 行高度,溢出部分卡片内上滑查看
+                child: ListView(
+                  physics: const BouncingScrollPhysics(),
+                  children: [for (final task in _tasks) _taskTile(task)],
+                ),
+              )
+            else
+              for (final task in _tasks) _taskTile(task),
             if (done == total)
               Padding(
                 padding: EdgeInsets.only(top: 6),
@@ -433,8 +443,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _taskTile(StudentTask task) {
+    // 已完成的任务不支持任何操作:整行不可点击。
     return InkWell(
-      onTap: () => _toggleTask(task),
+      onTap: task.done ? null : () => _toggleTask(task),
       borderRadius: BorderRadius.circular(12),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 7),
