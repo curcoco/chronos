@@ -1,53 +1,15 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
-/// 磨砂玻璃提示条:半透明 + 背景模糊(BackdropFilter),随明暗主题适配。
+import 'overlay_toast.dart';
+
+/// 磨砂玻璃提示条(转发到自绘 Overlay 实现,见 overlay_toast.dart)。
 ///
-/// 不排队:显示前先移除当前提示,多次触发时始终只展示最新一条,
-/// 避免多个提示排队依次弹出。
+/// 保持历史函数签名不变,所有调用点无需改动:
+/// - 入场上滑 + 淡入,退场下滑 + 淡出(替代 SnackBar 默认动画);
+/// - 不排队:显示前先移除当前提示,多次触发始终只展示最新一条;
+/// - 磨砂玻璃样式(半透明 + BackdropFilter 模糊)随明暗主题适配。
 void showFrostedSnack(BuildContext context, String message) {
-  final bool dark = Theme.of(context).brightness == Brightness.dark;
-  final Color glass = dark
-      ? const Color(0xFF243342).withValues(alpha: 0.72)
-      : Colors.white.withValues(alpha: 0.55);
-  final Color borderColor = dark
-      ? Colors.white.withValues(alpha: 0.18)
-      : Colors.white.withValues(alpha: 0.7);
-  final Color textColor =
-      dark ? const Color(0xFFE7EEF5) : const Color(0xFF1F2D3D);
-  final messenger = ScaffoldMessenger.of(context);
-  // 立即移除正在展示/排队的提示,让最新一条即时显示(不排队)。
-  messenger.removeCurrentSnackBar();
-  messenger.showSnackBar(
-    SnackBar(
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      padding: EdgeInsets.zero,
-      // 展示时长:4 秒的 2/3(缩短三分之一)
-      duration: const Duration(milliseconds: 2700),
-      margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-      content: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: glass,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: borderColor),
-            ),
-            child: Text(
-              message,
-              style: TextStyle(fontSize: 13, color: textColor),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
+  OverlayToast.instance.show(context, message: message);
 }
 
 /// 带「撤销」按钮的磨砂提示条。用于删除/清空等可撤销操作:
@@ -58,70 +20,11 @@ void showUndoSnack(
   required VoidCallback onUndo,
   String actionLabel = '撤销',
 }) {
-  final bool dark = Theme.of(context).brightness == Brightness.dark;
-  final Color glass = dark
-      ? const Color(0xFF243342).withValues(alpha: 0.72)
-      : Colors.white.withValues(alpha: 0.55);
-  final Color borderColor = dark
-      ? Colors.white.withValues(alpha: 0.18)
-      : Colors.white.withValues(alpha: 0.7);
-  final Color textColor =
-      dark ? const Color(0xFFE7EEF5) : const Color(0xFF1F2D3D);
-  final Color actionColor =
-      dark ? const Color(0xFF4FC3F7) : const Color(0xFF0288D1);
-  final messenger = ScaffoldMessenger.of(context);
-  // 不排队:立即移除当前/排队的提示,让撤销提示即时显示。
-  messenger.removeCurrentSnackBar();
-  messenger.showSnackBar(
-    SnackBar(
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      padding: EdgeInsets.zero,
-      duration: const Duration(milliseconds: 4000),
-      margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-      content: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-            decoration: BoxDecoration(
-              color: glass,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: borderColor),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    message,
-                    style: TextStyle(fontSize: 13, color: textColor),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    messenger.hideCurrentSnackBar();
-                    onUndo();
-                  },
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  ),
-                  child: Text(
-                    actionLabel,
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: actionColor,
-                        fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
+  OverlayToast.instance.show(
+    context,
+    message: message,
+    duration: const Duration(milliseconds: 4000),
+    actionLabel: actionLabel,
+    onUndo: onUndo,
   );
 }
