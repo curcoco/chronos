@@ -1,55 +1,44 @@
 import '../models/diary_entry.dart';
-import 'db_helper.dart';
+import 'base_dao.dart';
 
-/// 日记服务(按天一篇,upsert;本地存储)
-class DiaryService {
+/// 日记服务(一天可多篇,无上限;本地存储)。CRUD 复用 [BaseDao]。
+class DiaryService extends BaseDao<DiaryEntry> {
   DiaryService._();
   static final DiaryService instance = DiaryService._();
-  DbHelper get _db => DbHelper.instance;
 
-  Future<DiaryEntry?> diaryFor(String date) async {
-    final db = await _db.database;
-    final rows = await db.query('diary_entries',
-        where: 'entry_date = ?', whereArgs: [date], limit: 1);
-    return rows.isEmpty ? null : DiaryEntry.fromMap(rows.first);
-  }
+  @override
+  String get table => 'diary_entries';
 
-  /// 保存(当天已存在则更新)
-  Future<void> save(
+  @override
+  DiaryEntry fromMap(Map<String, Object?> map) => DiaryEntry.fromMap(map);
+
+  @override
+  Map<String, Object?> toMap(DiaryEntry entity) => entity.toMap();
+
+  @override
+  String get defaultOrderBy => 'created_at DESC';
+
+  /// 新增一篇日记(一天可多篇,始终追加),返回新行 id
+  Future<int> add(
     String date, {
     required String content,
     String? mood,
   }) async {
-    final db = await _db.database;
+    final text = content.trim();
+    if (text.isEmpty) return 0;
     final now = DateTime.now().millisecondsSinceEpoch;
-    final existing = await diaryFor(date);
-    if (existing == null) {
-      await db.insert('diary_entries', DiaryEntry(
-        content: content.trim(),
-        mood: mood,
-        date: date,
-        createdAt: now,
-        updatedAt: now,
-      ).toMap());
-    } else {
-      await db.update('diary_entries', {
-        'content': content.trim(),
-        'mood': mood,
-        'updated_at': now,
-      }, where: 'id = ?', whereArgs: [existing.id]);
-    }
+    return insert(DiaryEntry(
+      content: text,
+      mood: mood,
+      date: date,
+      createdAt: now,
+      updatedAt: now,
+    ));
   }
 
-  /// 全部日记,按日期倒序
-  Future<List<DiaryEntry>> all() async {
-    final db = await _db.database;
-    final rows = await db.query('diary_entries', orderBy: 'entry_date DESC');
-    return rows.map(DiaryEntry.fromMap).toList();
-  }
+  /// 直接插入一篇(用于「撤销删除」恢复原记录),返回新行 id
+  Future<int> restore(DiaryEntry entry) => insert(entry);
 
-  Future<void> delete(String date) async {
-    final db = await _db.database;
-    await db.delete('diary_entries',
-        where: 'entry_date = ?', whereArgs: [date]);
-  }
+  /// 全部日记,按创建时间倒序(最新在前)
+  Future<List<DiaryEntry>> all() => queryAll();
 }

@@ -7,6 +7,7 @@ import '../services/coin_service.dart';
 import '../services/wish_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/frosted_snack.dart';
 
 /// 金币中心:心愿清单兑换 + 收支历史
@@ -178,26 +179,14 @@ class _WishTabState extends State<_WishTab> {
 
   /// 删除心愿:删除前二次确认(避免误删)
   Future<void> _deleteWish(Wish wish) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除心愿'),
-        content: Text('确定删除「${wish.title}」?删除后不可恢复。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFE53935)),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+    final confirm = await showConfirmDialog(
+      context,
+      title: '删除心愿',
+      message: '确定删除「${wish.title}」?删除后不可恢复。',
+      confirmText: '删除',
+      destructive: true,
     );
-    if (confirm != true || !mounted) return;
+    if (!confirm || !mounted) return;
     await _wishService.deleteWish(wish.id!);
     await _load();
     _showSnack('已删除心愿');

@@ -9,6 +9,7 @@ import '../services/coin_service.dart';
 import '../services/health_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/frosted_snack.dart';
 import '../widgets/section_card.dart';
 
@@ -124,25 +125,14 @@ class _HealthPageState extends State<HealthPage> {
   }
 
   Future<void> _deleteKitchen(KitchenItem item) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除这条记录?'),
-        content: Text('「${item.name}」'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消')),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFE53935)),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+    final ok = await showConfirmDialog(
+      context,
+      title: '删除这条记录?',
+      message: '「${item.name}」',
+      confirmText: '删除',
+      destructive: true,
     );
-    if (ok != true || !mounted) return;
+    if (!ok || !mounted) return;
     await _service.deleteKitchenItem(item.id!);
     final items = await _service.kitchenItems();
     if (!mounted) return;

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -6,6 +8,9 @@ class DbHelper {
   DbHelper._();
   static final DbHelper instance = DbHelper._();
 
+  /// 当前数据库版本(结构变更时递增)
+  static const int dbVersion = 10;
+
   Database? _db;
 
   Future<Database> get database async {
@@ -13,17 +18,63 @@ class DbHelper {
     return _db!;
   }
 
+  /// 关闭并释放当前连接(下次访问会重新打开)。
+  /// 用于「从备份恢复」等需要先释放 .db 文件句柄的场景。
+  Future<void> close() async {
+    final db = _db;
+    _db = null;
+    if (db != null) await db.close();
+  }
+
+  /// 当前数据库文件的绝对路径。
+  Future<String> databasePath() async =>
+      join(await getDatabasesPath(), 'student_workbench.db');
+
   Future<Database> _open() async {
     final path = join(await getDatabasesPath(), 'student_workbench.db');
+    // 结构升级前先做一次原始文件备份(安全网):迁移出错时可回滚。
+    await _backupBeforeUpgradeIfNeeded(path);
     return openDatabase(
       path,
-      version: 8,
+      version: dbVersion,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
   }
 
+  /// 若检测到本地库版本低于目标版本,升级前把原始 .db 文件复制一份到
+  /// 同目录 backups/ 下(带时间戳),作为迁移失败时的回滚安全网。
+  /// 任何异常都不阻断正常打开流程(备份是尽力而为)。
+  Future<void> _backupBeforeUpgradeIfNeeded(String path) async {
+    try {
+      final file = File(path);
+      if (!await file.exists()) return; // 首次安装,无需备份
+      // 只读打开读取现有版本号,避免触发升级。
+      final probe = await openDatabase(path, readOnly: true);
+      final oldVersion = await probe.getVersion();
+      await probe.close();
+      if (oldVersion >= dbVersion) return; // 无需升级
+      final dir = Directory(join(dirname(path), 'backups'));
+      if (!await dir.exists()) await dir.create(recursive: true);
+      final now = DateTime.now();
+      String two(int v) => v.toString().padLeft(2, '0');
+      final stamp =
+          '${now.year}${two(now.month)}${two(now.day)}-${two(now.hour)}${two(now.minute)}${two(now.second)}';
+      final dest =
+          join(dir.path, 'pre-migrate-v$oldVersion-$stamp.db');
+      await file.copy(dest);
+    } catch (_) {
+      // 备份失败不影响 App 正常打开
+    }
+  }
+
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    await runMigrations(db, oldVersion, newVersion);
+  }
+
+  /// 迁移逻辑(公开供测试直接驱动:用 ffi 造旧版本库后调用此方法验证)。
+  static Future<void> runMigrations(
+      Database db, int oldVersion, int newVersion) async {
     // v2:coin_records 增加 task_id,用于取消完成时精确收回金币
     if (oldVersion < 2) {
       await db.execute('ALTER TABLE coin_records ADD COLUMN task_id INTEGER');
@@ -73,9 +124,38 @@ class DbHelper {
     if (oldVersion < 8) {
       await _createPlanTable(db);
     }
+    // v10:日记支持「一天多篇、无上限」——去掉 entry_date 的 UNIQUE 约束。
+    // SQLite 无法直接删除列约束,需重建表并迁移数据。
+    if (oldVersion < 10) {
+      await _migrateDiaryDropUnique(db);
+    }
   }
 
-  Future<void> _createPlanTable(Database db) async {
+  /// 重建 diary_entries,去掉 entry_date 的 UNIQUE 约束(一天可多篇)。
+  static Future<void> _migrateDiaryDropUnique(Database db) async {
+    await db.transaction((txn) async {
+      await txn.execute('ALTER TABLE diary_entries RENAME TO diary_entries_old');
+      await txn.execute('''
+        CREATE TABLE diary_entries(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          content TEXT NOT NULL,
+          mood TEXT,
+          entry_date TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      ''');
+      await txn.execute('''
+        INSERT INTO diary_entries (id, content, mood, entry_date, created_at, updated_at)
+        SELECT id, content, mood, entry_date, created_at, updated_at FROM diary_entries_old
+      ''');
+      await txn.execute('DROP TABLE diary_entries_old');
+      await txn.execute(
+          'CREATE INDEX idx_diary_date ON diary_entries(entry_date)');
+    });
+  }
+
+  static Future<void> _createPlanTable(Database db) async {
     await db.execute('''
       CREATE TABLE plan_items(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,7 +172,7 @@ class DbHelper {
     await db.execute('CREATE INDEX idx_plan_scope ON plan_items(scope)');
   }
 
-  Future<void> _createBatch3Tables(Database db) async {
+  static Future<void> _createBatch3Tables(Database db) async {
     await db.execute('''
       CREATE TABLE kitchen_items(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,7 +201,7 @@ class DbHelper {
     ''');
   }
 
-  Future<void> _createBatch2Tables(Database db) async {
+  static Future<void> _createBatch2Tables(Database db) async {
     await db.execute('''
       CREATE TABLE reviews(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -230,11 +310,13 @@ class DbHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         content TEXT NOT NULL,
         mood TEXT,
-        entry_date TEXT NOT NULL UNIQUE,
+        entry_date TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
     ''');
+    await db.execute(
+        'CREATE INDEX idx_diary_date ON diary_entries(entry_date)');
     await _createPlanTable(db);
   }
 }

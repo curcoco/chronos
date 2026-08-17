@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -5,6 +6,7 @@ import '../services/app_info.dart';
 import '../services/backup_service.dart';
 import '../services/settings_service.dart';
 import '../theme.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/frosted_snack.dart';
 import '../widgets/section_card.dart';
 import '../widgets/update_download_button.dart';
@@ -44,6 +46,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   bool _exporting = false;
+  bool _restoring = false;
 
   Future<void> _exportData() async {
     if (_exporting) return;
@@ -59,6 +62,43 @@ class _SettingsPageState extends State<SettingsPage> {
       showFrostedSnack(context, '导出失败:$e');
     } finally {
       if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  Future<void> _restoreData() async {
+    if (_restoring) return;
+    // 先选文件,再二次确认(覆盖是数据敏感操作)。
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['zip'],
+      withData: false,
+    );
+    final path = picked?.files.single.path;
+    if (path == null || !mounted) return;
+
+    final confirm = await showConfirmDialog(
+      context,
+      title: '用备份覆盖当前数据?',
+      message: '将用所选备份里的数据(任务 / 心愿 / 金币 / 日记 / 记忆 / 计划 / 记账等)'
+          '覆盖当前全部本地数据,现有数据会被替换。恢复前会自动保留一份当前数据副本。'
+          '\n\nAPI 密钥不受影响。',
+      confirmText: '覆盖恢复',
+      destructive: true,
+    );
+    if (!confirm || !mounted) return;
+
+    setState(() => _restoring = true);
+    try {
+      final result = await BackupService.instance.restoreFromZip(path);
+      if (!mounted) return;
+      showFrostedSnack(context,
+          '恢复完成:数据库已导入,设置项 ${result.prefsRestored} 项。重启应用后全部生效。');
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e is FormatException ? e.message : '$e';
+      showFrostedSnack(context, '恢复失败:$msg');
+    } finally {
+      if (mounted) setState(() => _restoring = false);
     }
   }
 
@@ -278,6 +318,46 @@ class _SettingsPageState extends State<SettingsPage> {
                           )
                         : const Icon(Icons.archive_rounded, size: 18),
                     label: Text(_exporting ? '正在导出…' : '导出为 zip 备份'),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '从备份恢复',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMain,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '选择之前导出的 zip,用它覆盖当前全部本地数据(换新设备时用)。'
+                  '覆盖前会自动保留一份当前数据副本;恢复后请重启应用生效。',
+                  style: TextStyle(
+                      fontSize: 12, color: AppColors.textSub, height: 1.5),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(46),
+                      foregroundColor: AppColors.primaryDark,
+                      side: BorderSide(
+                          color: AppColors.primary.withValues(alpha: 0.5)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: _restoring ? null : _restoreData,
+                    icon: _restoring
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child:
+                                CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.restore_rounded, size: 18),
+                    label: Text(_restoring ? '正在恢复…' : '从 zip 恢复'),
                   ),
                 ),
               ],

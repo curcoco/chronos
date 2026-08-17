@@ -1,5 +1,5 @@
 {
-  "version": "1.6.4",
-  "note": "灵感速记发送键修复;明暗切换即时刷新;设置页支持导出本地数据为 zip;新增隐藏拓展服务(云端 AI 记忆);日记固定当天并优化历史样式;本周计划与长期目标支持随机生成;计划条右滑显示编辑/删除",
-  "apk": "https://github.com/curcoco/chronos/releases/download/v1.6.4/chronos-1.6.4.apk"
+  "version": "1.7.0",
+  "note": "灵感速记「完成」键修复(输入法换行兜底+防重复保存);日记支持一天多篇、无上限;「删除这一天」改为「清空草稿」,单篇可删并支持撤销;历史长文用…省略并可点开看全文;日记历史按日期分组;删除操作支持撤销;首页灵感卡新增写日记入口;空状态引导优化;数据库升级前自动本地备份",
+  "apk": "https://github.com/curcoco/chronos/releases/download/v1.7.0/chronos-1.7.0.apk"
 }

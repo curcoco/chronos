@@ -5,6 +5,7 @@ import '../models/note.dart';
 import '../services/note_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/frosted_snack.dart';
 import '../widgets/mood_badge.dart';
 
@@ -35,25 +36,13 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
   }
 
   Future<void> _delete() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除这条记录?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: const Color(0xFFE53935)),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+    final ok = await showConfirmDialog(
+      context,
+      title: '删除这条记录?',
+      confirmText: '删除',
+      destructive: true,
     );
-    if (ok != true || !mounted) return;
+    if (!ok || !mounted) return;
     await NoteService().deleteNote(widget.note.id!);
     if (!mounted) return;
     Navigator.of(context).pop();

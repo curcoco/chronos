@@ -218,12 +218,12 @@ class _PlanListViewState extends State<PlanListView> {
   }
 
   Widget _tile(PlanItem item) {
-    // 编辑/删除键默认隐藏,右滑(从左向右)显示操作按钮。
+    // 编辑/删除键默认隐藏,左滑(从右向左)显示操作按钮。
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Slidable(
         key: ValueKey(item.id),
-        startActionPane: ActionPane(
+        endActionPane: ActionPane(
           motion: const DrawerMotion(),
           extentRatio: 0.5,
           children: [
@@ -291,10 +291,10 @@ class _PlanListViewState extends State<PlanListView> {
                     ),
                   ),
                 ),
-                // 右滑提示:小箭头暗示可滑出操作
+                // 左滑提示:小箭头暗示可向左滑出操作
                 Padding(
                   padding: const EdgeInsets.only(top: 14),
-                  child: Icon(Icons.swipe_right_alt_rounded,
+                  child: Icon(Icons.swipe_left_alt_rounded,
                       size: 18,
                       color: AppColors.textSub.withValues(alpha: 0.5)),
                 ),

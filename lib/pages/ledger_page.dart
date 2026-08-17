@@ -5,6 +5,7 @@ import '../services/coin_service.dart';
 import '../services/ledger_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/frosted_snack.dart';
 
 /// 生活记账:余额 / 明细 / 日历 / 图表 / 预算 / 分类(纯本地)
@@ -764,26 +765,14 @@ class _LedgerPageState extends State<LedgerPage> {
   }
 
   Future<void> _removeCustomCat(String name) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除这个分类?'),
-        content: Text('「$name」将不再出现在记一笔的分类里。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFE53935)),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+    final ok = await showConfirmDialog(
+      context,
+      title: '删除这个分类?',
+      message: '「$name」将不再出现在记一笔的分类里。',
+      confirmText: '删除',
+      destructive: true,
     );
-    if (ok != true || !mounted) return;
+    if (!ok || !mounted) return;
     await _service.removeCustomCat(name);
     final cats = await _service.customCats();
     if (!mounted) return;

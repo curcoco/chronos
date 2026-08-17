@@ -10,10 +10,12 @@ import '../services/task_service.dart';
 import '../services/weather_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
+import '../widgets/app_text_field.dart';
 import '../widgets/frosted_snack.dart';
 import '../widgets/section_card.dart';
 import '../widgets/task_confirm_dialog.dart';
 import 'coin_center_page.dart';
+import 'diary_page.dart';
 
 /// 首页仪表盘:今日任务概览 / 灵感快捷速记 / 每日英语一句 / 金币入口
 class HomePage extends StatefulWidget {
@@ -31,6 +33,7 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _noteCtrl = TextEditingController();
 
   bool _loading = true;
+  bool _savingNote = false; // 灵感速记保存去抖
   List<StudentTask> _tasks = [];
   int _coin = 0;
   int _todayEarned = 0;
@@ -140,15 +143,21 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _saveNote() async {
+    if (_savingNote) return; // 去抖:避免「完成」键与换行回调重复触发
     final text = _noteCtrl.text;
     if (text.trim().isEmpty) {
       _showSnack('写点什么再保存吧~');
       return;
     }
-    await _noteService.addNote(text);
-    _noteCtrl.clear();
-    await _reload();
-    _showSnack('已同步到灵感专区');
+    setState(() => _savingNote = true);
+    try {
+      await _noteService.addNote(text);
+      _noteCtrl.clear();
+      await _reload();
+      _showSnack('已同步到灵感专区');
+    } finally {
+      if (mounted) setState(() => _savingNote = false);
+    }
   }
 
   Future<void> _openCoinCenter() async {
@@ -472,32 +481,66 @@ class _HomePageState extends State<HomePage> {
   Widget _buildNoteCard() {
     return SectionCard(
       title: '灵感速记',
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      trailing: TextButton.icon(
+        onPressed: () async {
+          await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const DiaryPage()),
+          );
+          await _reload();
+        },
+        icon: Icon(Icons.menu_book_rounded,
+            size: 16, color: AppColors.primaryDark),
+        label: Text('写日记',
+            style: TextStyle(fontSize: 13, color: AppColors.primaryDark)),
+        style: TextButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: TextField(
-              controller: _noteCtrl,
-              maxLength: 80,
-              decoration: const InputDecoration(
-                hintText: '记下一句话灵感…',
-                counterText: '',
-              ),
-            ),
+          Text(
+            '碎片灵感随手记;想写成篇的心情日记点右上角',
+            style: TextStyle(fontSize: 11, color: AppColors.textSub),
           ),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: 52,
-            height: 46,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(52, 46),
-                shape: const CircleBorder(),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: AppTextField(
+                  controller: _noteCtrl,
+                  maxLength: 80,
+                  hintText: '记下一句话灵感…',
+                  onSubmit: _saveNote,
+                ),
               ),
-              onPressed: _saveNote,
-              child: const Icon(Icons.send_rounded, size: 20),
-            ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 52,
+                height: 46,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(52, 46),
+                    shape: const CircleBorder(),
+                  ),
+                  onPressed: _savingNote ? null : _saveNote,
+                  child: _savingNote
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(Icons.send_rounded, size: 20),
+                ),
+              ),
+            ],
           ),
         ],
       ),

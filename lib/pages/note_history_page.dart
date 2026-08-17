@@ -4,6 +4,7 @@ import '../models/note.dart';
 import '../services/note_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/frosted_snack.dart';
 import '../widgets/mood_badge.dart';
 import 'note_detail_page.dart';
@@ -179,31 +180,32 @@ class _NoteHistoryPageState extends State<NoteHistoryPage> {
 
   Future<void> _deleteSelected() async {
     if (_selected.isEmpty) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除选中的记录?'),
-        content: Text('将删除 ${_selected.length} 条记录,不可恢复。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFE53935)),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+    final ok = await showConfirmDialog(
+      context,
+      title: '删除选中的记录?',
+      message: '将删除 ${_selected.length} 条记录,不可恢复。',
+      confirmText: '删除',
+      destructive: true,
     );
-    if (ok != true || !mounted) return;
+    if (!ok || !mounted) return;
     final count = _selected.length;
+    // 记住被删记录用于撤销
+    final removed =
+        _all.where((n) => _selected.contains(n.id)).toList();
     await _noteService.deleteNotes(_selected.toList());
     _cancelSelect();
     await _load();
-    _showSnack('已删除 $count 条记录');
+    if (!mounted) return;
+    showUndoSnack(
+      context,
+      '已删除 $count 条记录',
+      onUndo: () async {
+        for (final n in removed) {
+          await _noteService.restore(n);
+        }
+        await _load();
+      },
+    );
   }
 
   @override
@@ -456,6 +458,8 @@ class _NoteHistoryPageState extends State<NoteHistoryPage> {
                 children: [
                   Text(
                     note.content,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 15, height: 1.55),
                   ),
                   const SizedBox(height: 5),

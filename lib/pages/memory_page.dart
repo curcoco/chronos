@@ -9,6 +9,7 @@ import '../services/memory_service.dart';
 import '../services/supabase_sync_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/frosted_snack.dart';
 import 'extension_service_page.dart';
 
@@ -122,26 +123,14 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   Future<void> _delete(MemoryItem item) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除这条记忆?'),
-        content: Text(item.content),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFE53935)),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+    final ok = await showConfirmDialog(
+      context,
+      title: '删除这条记忆?',
+      message: item.content,
+      confirmText: '删除',
+      destructive: true,
     );
-    if (ok != true || !mounted) return;
+    if (!ok || !mounted) return;
     await _service.delete(item.id!);
     await _reload();
     _showSnack('已删除');

@@ -4,6 +4,8 @@ import '../models/note.dart';
 import '../services/note_service.dart';
 import '../theme.dart';
 import '../utils/dates.dart';
+import '../widgets/app_text_field.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/frosted_snack.dart';
 import '../widgets/mood_badge.dart';
 import 'diary_page.dart';
@@ -28,6 +30,7 @@ class _QuickNotePageState extends State<QuickNotePage> {
   List<Note> _notes = [];
   bool _loading = true;
   bool _favOnly = false;
+  bool _saving = false; // 防止「完成」键与发送按钮/换行回调重复触发保存
   String? _mood; // 本次记录的心情(null=无)
 
   static const List<(String, String)> _moodOptions = [
@@ -69,18 +72,24 @@ class _QuickNotePageState extends State<QuickNotePage> {
   }
 
   Future<void> _save() async {
+    if (_saving) return; // 去抖:避免「完成」键 + 换行回调重复保存
     final text = _ctrl.text;
     if (text.trim().isEmpty) {
       _showSnack('写点什么再保存吧~');
       return;
     }
-    await _noteService.addNote(text, mood: _mood);
-    _ctrl.clear();
-    setState(() => _mood = null); // 心情仅记一次,写完复位
-    // 保持聚焦,方便连写多条
-    _focusNode.requestFocus();
-    await _load();
-    _showSnack('已保存到灵感专区');
+    setState(() => _saving = true);
+    try {
+      await _noteService.addNote(text, mood: _mood);
+      _ctrl.clear();
+      setState(() => _mood = null); // 心情仅记一次,写完复位
+      // 保持聚焦,方便连写多条
+      _focusNode.requestFocus();
+      await _load();
+      _showSnack('已保存到灵感专区');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _openDetail(Note note) async {
@@ -91,33 +100,29 @@ class _QuickNotePageState extends State<QuickNotePage> {
   }
 
   /// 左滑删除前确认
-  Future<bool> _confirmDelete(Note note) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除这条记录?'),
-        content: Text('「${note.content}」'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFE53935)),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+  Future<bool> _confirmDelete(Note note) {
+    return showConfirmDialog(
+      context,
+      title: '删除这条记录?',
+      message: '「${note.content}」',
+      confirmText: '删除',
+      destructive: true,
     );
-    return ok ?? false;
   }
 
   Future<void> _delete(Note note) async {
+    final removed = note; // 记住被删记录用于撤销
     await _noteService.deleteNote(note.id!);
     await _load();
-    _showSnack('已删除');
+    if (!mounted) return;
+    showUndoSnack(
+      context,
+      '已删除',
+      onUndo: () async {
+        await _noteService.restore(removed);
+        await _load();
+      },
+    );
   }
 
   void _showSnack(String msg) {
@@ -197,11 +202,48 @@ class _QuickNotePageState extends State<QuickNotePage> {
                   ? const Center(child: CircularProgressIndicator())
                   : display.isEmpty
                       ? Center(
-                          child: Text(
-                            _favOnly ? '还没有收藏的灵感' : '还没有灵感记录,快写一句吧~',
-                            style:
-                                TextStyle(color: AppColors.textSub),
-                          ),
+                          child: _favOnly
+                              ? Text(
+                                  '还没有收藏的灵感',
+                                  style: TextStyle(color: AppColors.textSub),
+                                )
+                              : Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 40),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 72,
+                                        height: 72,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primaryLight
+                                              .withValues(alpha: 0.4),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                            Icons.lightbulb_outline_rounded,
+                                            size: 36,
+                                            color: AppColors.primaryDark),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text('还没有灵感记录',
+                                          style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.textMain)),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        '在下方输入框写一句,\n比如「明天要早起背单词」',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            height: 1.6,
+                                            color: AppColors.textSub),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
@@ -237,19 +279,16 @@ class _QuickNotePageState extends State<QuickNotePage> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Expanded(
-                    child: TextField(
+                    child: AppTextField(
                       controller: _ctrl,
                       focusNode: _focusNode,
                       autofocus: true,
                       minLines: 1,
-                      maxLines: 3,
+                      maxLines: 5,
                       maxLength: 200,
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => _save(),
-                      decoration: const InputDecoration(
-                        hintText: '随时记录一句话灵感…',
-                        counterText: '',
-                      ),
+                      hintText: '记录灵感,可换行;写完点右侧保存',
+                      // 灵感速记为换行框:回车正常换行,保存只走右侧发送按钮。
+                      submitOnEnter: false,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -263,11 +302,21 @@ class _QuickNotePageState extends State<QuickNotePage> {
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
-                      onPressed: _save,
+                      onPressed: _saving ? null : _save,
                       padding: EdgeInsets.zero,
                       tooltip: '保存灵感',
-                      icon: const Icon(Icons.send_rounded,
-                          size: 22, color: Colors.white),
+                      icon: _saving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white),
+                              ),
+                            )
+                          : const Icon(Icons.send_rounded,
+                              size: 22, color: Colors.white),
                     ),
                   ),
                 ],
@@ -338,6 +387,8 @@ class _QuickNotePageState extends State<QuickNotePage> {
                       children: [
                         Text(
                           note.content,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 15, height: 1.5),
                         ),
                         const SizedBox(height: 4),

@@ -172,4 +172,48 @@ void main() {
       expect(list.first.title, 'earlier');
     });
   });
+
+  group('灵感速记提交去抖/换行兜底语义', () {
+    // 模拟 AppTextField 的换行兜底 + 去抖:值以换行结尾 → 触发一次提交,
+    // 且「提交中」时重复调用被忽略(不重复保存)。
+    test('结尾换行触发一次提交并剥离换行', () {
+      var submitCount = 0;
+      String? committed;
+      var text = '';
+      void handleChange(String value) {
+        if (value.endsWith('\n')) {
+          final cleaned = value.substring(0, value.length - 1);
+          text = cleaned;
+          committed = cleaned;
+          submitCount++;
+        }
+      }
+
+      handleChange('你好\n');
+      expect(submitCount, 1);
+      expect(text, '你好');
+      expect(committed, '你好');
+    });
+
+    test('提交中标志阻止重复保存', () async {
+      var saving = false;
+      var saves = 0;
+      Future<void> save() async {
+        if (saving) return;
+        saving = true;
+        try {
+          saves++;
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        } finally {
+          saving = false;
+        }
+      }
+
+      // 连续两次(如「完成」键 + 换行回调)只应保存一次。
+      final f1 = save();
+      final f2 = save();
+      await Future.wait([f1, f2]);
+      expect(saves, 1);
+    });
+  });
 }
