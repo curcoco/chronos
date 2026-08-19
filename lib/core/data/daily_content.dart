@@ -1,11 +1,32 @@
 import 'dart:math';
 
+import 'package:student_workbench/core/data/content_store.dart';
 import 'package:student_workbench/core/utils/dates.dart';
 
 /// 每日内容池:夸赞金句 / 每日英语 / 自动生成任务
 /// 全部离线内置,按日期确定性选取,同一天结果稳定。
+/// 支持远程内容覆盖(ContentStore,热更不换包)。
 class DailyContent {
   DailyContent._();
+
+  /// 当前生效的金句池(远程覆盖优先)。
+  static List<String> get quotePool => ContentStore.quotes ?? quotes;
+
+  /// 当前生效的英语池。
+  static List<({String en, String zh})> get englishPool =>
+      ContentStore.english ?? english;
+
+  /// 当前生效的自动任务池。
+  static List<({String title, String category})> get autoTaskPool =>
+      ContentStore.autoTasks ?? autoTasks;
+
+  /// 当前生效的本周计划池。
+  static List<({String title, String detail})> get weekPlanPool =>
+      ContentStore.weekPlans ?? weekPlans;
+
+  /// 当前生效的长期目标池。
+  static List<({String title, String detail})> get longTermGoalPool =>
+      ContentStore.longTermGoals ?? longTermGoals;
 
   static const List<String> quotes = [
     '万物皆有裂痕,那是光照进来的地方。',
@@ -78,12 +99,12 @@ class DailyContent {
 
   /// 当日随机夸赞金句(按日期种子,稳定)
   static String quoteFor(String date) =>
-      quotes[Random(dateSeed(date)).nextInt(quotes.length)];
+      quotePool[Random(dateSeed(date)).nextInt(quotePool.length)];
 
   /// 当日英语一句(按天轮换)
   static ({String en, String zh}) englishFor(DateTime now) {
-    final idx = daysSinceEpoch(now) % english.length;
-    return english[idx];
+    final idx = daysSinceEpoch(now) % englishPool.length;
+    return englishPool[idx];
   }
 
   /// 按日期随机生成 3 条今日任务
@@ -91,9 +112,9 @@ class DailyContent {
     final rnd = Random(dateSeed(date));
     final picked = <int>{};
     while (picked.length < 3) {
-      picked.add(rnd.nextInt(autoTasks.length));
+      picked.add(rnd.nextInt(autoTaskPool.length));
     }
-    return picked.map((i) => autoTasks[i]).toList();
+    return picked.map((i) => autoTaskPool[i]).toList();
   }
 
   /// 随机取一条任务(排除已用标题;池子用尽则允许重复)
@@ -101,8 +122,8 @@ class DailyContent {
     Set<String> exclude = const {},
   }) {
     final candidates =
-        autoTasks.where((t) => !exclude.contains(t.title)).toList();
-    final pool = candidates.isEmpty ? autoTasks : candidates;
+        autoTaskPool.where((t) => !exclude.contains(t.title)).toList();
+    final pool = candidates.isEmpty ? autoTaskPool : candidates;
     return pool[Random().nextInt(pool.length)];
   }
 
@@ -141,8 +162,8 @@ class DailyContent {
     Set<String> exclude = const {},
   }) {
     final candidates =
-        weekPlans.where((t) => !exclude.contains(t.title)).toList();
-    final pool = candidates.isEmpty ? weekPlans : candidates;
+        weekPlanPool.where((t) => !exclude.contains(t.title)).toList();
+    final pool = candidates.isEmpty ? weekPlanPool : candidates;
     return pool[Random().nextInt(pool.length)];
   }
 
@@ -151,8 +172,8 @@ class DailyContent {
     Set<String> exclude = const {},
   }) {
     final candidates =
-        longTermGoals.where((t) => !exclude.contains(t.title)).toList();
-    final pool = candidates.isEmpty ? longTermGoals : candidates;
+        longTermGoalPool.where((t) => !exclude.contains(t.title)).toList();
+    final pool = candidates.isEmpty ? longTermGoalPool : candidates;
     return pool[Random().nextInt(pool.length)];
   }
 }

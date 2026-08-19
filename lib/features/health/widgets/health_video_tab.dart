@@ -309,7 +309,7 @@ class _HealthVideoTabState extends State<HealthVideoTab> {
         const Text('内置跟练',
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
-        for (final v in HealthContent.videos)
+        for (final v in HealthContent.videoPool)
           Container(
             padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(

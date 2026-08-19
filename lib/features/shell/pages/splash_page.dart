@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:student_workbench/core/data/daily_content.dart';
+import 'package:student_workbench/core/data/content_updater.dart';
 import 'package:student_workbench/routes.dart';
 import 'package:student_workbench/core/services/settings_service.dart';
 import 'package:student_workbench/core/theme.dart';
@@ -44,6 +45,8 @@ class _SplashPageState extends State<SplashPage> {
       _dateLabel = monthDayLabel(now);
       _week = weekdayLabel(now);
     });
+    // 后台热更离线内容池(金句/词库等,小更新不换包);失败静默用内置。
+    ContentUpdater.instance.update();
   }
 
   @override

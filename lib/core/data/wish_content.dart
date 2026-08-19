@@ -1,6 +1,8 @@
 import 'dart:math';
 
-/// 系统随机心愿池(金币中心「随机心愿」用)
+import 'package:student_workbench/core/data/content_store.dart';
+
+/// 系统随机心愿池(金币中心「随机心愿」用,支持远程覆盖)
 class WishContent {
   WishContent._();
 
@@ -22,7 +24,7 @@ class WishContent {
   /// 随机取一个心愿(排除已有标题;池子用尽返回 null)
   static ({String title, int cost})? randomWish(Set<String> exclude) {
     final pool =
-        wishes.where((w) => !exclude.contains(w.title)).toList();
+        (ContentStore.wishes ?? wishes).where((w) => !exclude.contains(w.title)).toList();
     if (pool.isEmpty) return null;
     return pool[Random().nextInt(pool.length)];
   }

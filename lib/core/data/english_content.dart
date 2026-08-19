@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:student_workbench/core/data/content_store.dart';
 import 'package:student_workbench/core/utils/dates.dart';
 
 /// 英文积累内容池:每日单词 / 每日阅读 / 每日写作提示(全部离线内置,按日期确定性选取)
@@ -58,19 +59,24 @@ class EnglishContent {
 
   /// 按日期确定性取 5 个单词
   static List<({String w, String p, String m})> wordsFor(String date) {
+    final pool = ContentStore.words ?? words;
     final rnd = Random(dateSeed(date));
     final picked = <int>{};
     while (picked.length < 5) {
-      picked.add(rnd.nextInt(words.length));
+      picked.add(rnd.nextInt(pool.length));
     }
-    return picked.map((i) => words[i]).toList();
+    return picked.map((i) => pool[i]).toList();
   }
 
   /// 按日期取一篇阅读
-  static ({String title, String text}) readingFor(String date) =>
-      readings[Random(dateSeed(date)).nextInt(readings.length)];
+  static ({String title, String text}) readingFor(String date) {
+    final pool = ContentStore.readings ?? readings;
+    return pool[Random(dateSeed(date)).nextInt(pool.length)];
+  }
 
   /// 按日期取一个写作提示
-  static String writingFor(String date) =>
-      writings[Random(dateSeed(date)).nextInt(writings.length)];
+  static String writingFor(String date) {
+    final pool = ContentStore.writings ?? writings;
+    return pool[Random(dateSeed(date)).nextInt(pool.length)];
+  }
 }

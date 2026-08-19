@@ -4,6 +4,7 @@ import 'package:student_workbench/features/coins/services/coin_service.dart';
 import 'package:student_workbench/features/tasks/services/task_service.dart';
 import 'package:student_workbench/features/tasks/models/student_task.dart';
 import 'package:student_workbench/core/data/daily_content.dart';
+import 'package:student_workbench/core/data/content_store.dart';
 import 'package:student_workbench/core/utils/dates.dart';
 import 'package:student_workbench/features/chat/tools/tool_registry.dart';
 
@@ -260,6 +261,37 @@ void main() {
         {'title': '写作业'},
       );
       expect(r, contains('用户需确认'));
+    });
+  });
+
+  group('远程内容热更(ContentStore 覆盖)', () {
+    tearDown(() {
+      // 清理覆盖,避免影响其它测试(内置池不变)。
+      ContentStore.quotes = null;
+      ContentStore.english = null;
+      ContentStore.autoTasks = null;
+      ContentStore.weekPlans = null;
+      ContentStore.longTermGoals = null;
+      ContentStore.words = null;
+      ContentStore.readings = null;
+      ContentStore.writings = null;
+      ContentStore.meals = null;
+      ContentStore.videos = null;
+      ContentStore.wishes = null;
+    });
+
+    test('设置覆盖后 quoteFor 从覆盖池取值', () {
+      ContentStore.quotes = ['远程金句一', '远程金句二'];
+      final q = DailyContent.quoteFor('2026-08-17');
+      expect(ContentStore.quotes!.contains(q), isTrue);
+    });
+
+    test('覆盖前用内置池、覆盖后切换', () {
+      final before = DailyContent.quotePool;
+      expect(before, DailyContent.quotes);
+      ContentStore.quotes = ['远程金句一'];
+      expect(DailyContent.quotePool, isNot(equals(DailyContent.quotes)));
+      expect(DailyContent.quotePool.single, '远程金句一');
     });
   });
 }
