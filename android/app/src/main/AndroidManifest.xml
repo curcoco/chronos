@@ -3,10 +3,13 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- app 内下载更新:调起系统安装器安装新 APK -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- usesCleartextTraffic:更新源与 Nocturne 外置记忆均为用户自配的 http 服务,
+         需允许明文流量。若后续全部迁 https,可移除此属性。 -->
     <application
         android:label="Chronos"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart' show rootBundle;
 
+import 'package:student_workbench/core/services/key_store.dart';
+
 /// 更新检查结果
 class UpdateStatus {
   /// 远程检查是否成功(联网可达)
@@ -27,18 +29,25 @@ class UpdateStatus {
 
 /// 应用信息:版本号读取与更新检查。
 /// 本项目唯一联网点:更新检查与 APK 下载(其余功能全部零网络)。
+/// 更新源可在「系统设置」配置(默认阿里云服务器,见 [defaultUpdateCheckUrl])。
 class AppInfo {
   AppInfo._();
 
   /// 离线兜底用的「最新版本」参照,每次发版时与 pubspec.yaml 的 version 同步更新。
   static const String latestVersion = '1.9.0';
 
-  /// 更新检查地址:托管一个可达的 latest.json,内容形如
-  /// {"version":"1.2.0","note":"…","apk":"https://…/chronos-1.2.0.apk"}
-  /// 更新源:阿里云服务器 120.76.230.67 的静态更新源(chronos-update 服务,
+  /// 默认更新源:阿里云服务器 120.76.230.67 的静态更新源(chronos-update 服务,
   /// 端口 18011)。latest.json 与 APK 都放服务器 /opt/chronos-update/ 目录。
-  static const String updateCheckUrl =
+  static const String defaultUpdateCheckUrl =
       'http://120.76.230.67:18011/latest.json';
+
+  /// 当前更新检查地址:应用内可配置(KeyStore.updateCheckUrl 非空则用之),
+  /// 为空时用 [defaultUpdateCheckUrl]。latest.json 内容形如
+  /// {"version":"1.2.0","note":"…","apk":"https://…/chronos-1.2.0.apk"}
+  static Future<String> updateCheckUrl() async {
+    final custom = await KeyStore.instance.get(KeyStore.updateCheckUrl);
+    return custom.isNotEmpty ? custom : defaultUpdateCheckUrl;
+  }
 
   /// 从打包进 APK 的 pubspec.yaml 读取安装版本(如 1.2.0+3 → 1.2.0)
   static Future<String> installedVersion() async {
@@ -77,11 +86,12 @@ class AppInfo {
   /// 拉取远程最新版本信息;任何异常返回 null
   static Future<({String version, String? note, String? apk})?>
       _fetchRemoteLatest() async {
+    final url = await updateCheckUrl();
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 5);
     try {
       final req = await client
-          .getUrl(Uri.parse(updateCheckUrl))
+          .getUrl(Uri.parse(url))
           .timeout(const Duration(seconds: 6));
       req.headers.set(HttpHeaders.acceptHeader, 'application/json');
       final res = await req.close().timeout(const Duration(seconds: 6));

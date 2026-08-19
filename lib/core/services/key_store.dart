@@ -17,6 +17,7 @@ class KeyStore {
   static const String supabaseAnonKey = 'supabase_anon_key';
   static const String nocturneUrl = 'nocturne_url';
   static const String nocturneToken = 'nocturne_token';
+  static const String updateCheckUrl = 'update_check_url';
 
   static const List<String> allKeys = [
     llmBaseUrl,
@@ -30,6 +31,7 @@ class KeyStore {
     supabaseAnonKey,
     nocturneUrl,
     nocturneToken,
+    updateCheckUrl,
   ];
 
   Future<String> get(String key) async {

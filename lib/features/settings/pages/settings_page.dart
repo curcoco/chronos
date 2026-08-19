@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:student_workbench/routes.dart';
 import 'package:student_workbench/core/services/app_info.dart';
 import 'package:student_workbench/core/services/backup_service.dart';
+import 'package:student_workbench/core/services/key_store.dart';
 import 'package:student_workbench/core/services/settings_service.dart';
 import 'package:student_workbench/core/theme.dart';
 import 'package:student_workbench/core/widgets/confirm_dialog.dart';
@@ -50,6 +51,46 @@ class _SettingsPageState extends State<SettingsPage> {
     final s = await AppInfo.checkUpdate(_version);
     if (!mounted) return;
     setState(() => _status = s);
+  }
+
+  /// 编辑更新源地址(留空 = 使用默认阿里云服务器)。
+  Future<void> _editUpdateSource() async {
+    final current = await KeyStore.instance.get(KeyStore.updateCheckUrl);
+    if (!mounted) return;
+    final ctrl = TextEditingController(text: current);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('更新源地址'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(
+            hintText: 'https://…/latest.json(留空用默认)',
+            helperText: '默认:${AppInfo.defaultUpdateCheckUrl}',
+            helperMaxLines: 2,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(ctrl.text.trim()),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    if (result == null || !mounted) return;
+    await KeyStore.instance.set(KeyStore.updateCheckUrl, result);
+    if (!mounted) return;
+    showFrostedSnack(context,
+        result.isEmpty ? '已恢复默认更新源' : '更新源已保存,重新检查试试');
+    await _check();
   }
 
   bool _exporting = false;
@@ -239,6 +280,25 @@ class _SettingsPageState extends State<SettingsPage> {
                     icon: const Icon(Icons.refresh_rounded, size: 18),
                     label: const Text('重新检查更新'),
                   ),
+                ),
+                const SizedBox(height: 10),
+                // 更新源配置:默认阿里云服务器,可改为自己的 OSS/静态托管地址。
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.link_rounded,
+                      size: 20, color: AppColors.primaryDark),
+                  title: const Text(
+                    '更新源地址',
+                    style:
+                        TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    '默认阿里云服务器;可改为你的 OSS 等静态地址',
+                    style: TextStyle(fontSize: 11, color: AppColors.textSub),
+                  ),
+                  trailing: Icon(Icons.chevron_right_rounded,
+                      size: 20, color: AppColors.textSub),
+                  onTap: _editUpdateSource,
                 ),
                 const SizedBox(height: 10),
                 Text(
