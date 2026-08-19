@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'package:student_workbench/routes.dart';
 import 'package:student_workbench/core/services/app_info.dart';
@@ -31,6 +34,7 @@ class AppDrawer extends StatefulWidget {
 class _AppDrawerState extends State<AppDrawer> {
   String _version = '';
   String _nickname = '';
+  String _avatarPath = ''; // 头像图片本地路径(空=未设置)
   UpdateStatus? _status; // null = 检查中/未检查
 
   @override
@@ -42,10 +46,12 @@ class _AppDrawerState extends State<AppDrawer> {
   Future<void> _init() async {
     final v = await AppInfo.installedVersion();
     final nickname = await SettingsService.instance.nickname();
+    final avatar = await SettingsService.instance.avatarPath();
     if (!mounted) return;
     setState(() {
       _version = v;
       _nickname = nickname;
+      _avatarPath = avatar;
     });
     await _check();
   }
@@ -83,6 +89,109 @@ class _AppDrawerState extends State<AppDrawer> {
     if (!mounted) return;
     setState(() => _nickname = result);
     showFrostedSnack(context, '昵称已更新');
+  }
+
+  /// 编辑资料:弹底部菜单(改昵称 / 换头像 / 移除头像)。
+  Future<void> _editProfile() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.badge_outlined),
+              title: const Text('修改昵称'),
+              onTap: () => Navigator.of(sheetCtx).pop('nickname'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('更换头像'),
+              onTap: () => Navigator.of(sheetCtx).pop('pick'),
+            ),
+            if (_avatarPath.isNotEmpty)
+              ListTile(
+                leading: Icon(Icons.person_off_outlined,
+                    color: AppColors.textSub),
+                title: const Text('移除头像'),
+                onTap: () => Navigator.of(sheetCtx).pop('remove'),
+              ),
+            const Divider(height: 1),
+            ListTile(
+              title: Center(
+                child: Text('取消',
+                    style: TextStyle(color: AppColors.textSub)),
+              ),
+              onTap: () => Navigator.of(sheetCtx).pop(),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case 'nickname':
+        await _editNickname();
+      case 'pick':
+        await _pickAvatar();
+      case 'remove':
+        await SettingsService.instance.setAvatarPath('');
+        if (!mounted) return;
+        setState(() => _avatarPath = '');
+        showFrostedSnack(context, '已移除头像');
+    }
+  }
+
+  /// 头像组件:有图显示图片,无图显示昵称首字。
+  Widget _avatarWidget() {
+    final path = _avatarPath;
+    return CircleAvatar(
+      radius: 20,
+      backgroundColor: AppColors.primaryLight,
+      foregroundImage: path.isNotEmpty
+          ? FileImage(File(path), scale: 1.0)
+          : null,
+      child: path.isEmpty
+          ? Text(
+              _nickname.isEmpty ? '?' : _nickname.substring(0, 1),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primaryDark,
+              ),
+            )
+          : null,
+    );
+  }
+
+  /// 选择图片作为头像:复制到应用文档目录持久化。
+  Future<void> _pickAvatar() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 85,
+    );
+    if (picked == null || !mounted) return;
+    try {
+      // 存到应用文档目录(备份 zip 也会带上,便于换机迁移)。
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File(picked.path);
+      final ext = picked.path.contains('.png') ? 'png' : 'jpg';
+      final dest = File('${dir.path}/avatar.$ext');
+      await file.copy(dest.path);
+      await SettingsService.instance.setAvatarPath(dest.path);
+      if (!mounted) return;
+      setState(() => _avatarPath = dest.path);
+      showFrostedSnack(context, '头像已更新');
+    } catch (_) {
+      if (!mounted) return;
+      showFrostedSnack(context, '头像设置失败,请重试');
+    }
   }
 
   Future<void> _check() async {
@@ -200,26 +309,13 @@ class _AppDrawerState extends State<AppDrawer> {
                       color: _glassColor(),
                       borderRadius: BorderRadius.circular(14),
                       child: InkWell(
-                        onTap: _editNickname,
+                        onTap: _editProfile,
                         borderRadius: BorderRadius.circular(14),
                         child: Padding(
                           padding: const EdgeInsets.all(12),
                           child: Row(
                             children: [
-                              CircleAvatar(
-                                radius: 20,
-                                backgroundColor: AppColors.primaryLight,
-                                child: Text(
-                                  _nickname.isEmpty
-                                      ? '?'
-                                      : _nickname.substring(0, 1),
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.primaryDark,
-                                  ),
-                                ),
-                              ),
+                              _avatarWidget(),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
@@ -235,7 +331,7 @@ class _AppDrawerState extends State<AppDrawer> {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      '点击修改昵称',
+                                      '点击编辑资料',
                                       style: TextStyle(
                                           fontSize: 11, color: AppColors.textSub),
                                     ),

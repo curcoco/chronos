@@ -1,13 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'package:student_workbench/core/theme.dart';
 
 /// 首页头部:日期 + 星期 + 金句 + 用户头像(点击开侧边栏)。
+/// [avatarPath] 非空时显示头像图片,否则显示昵称首字。
 class HomeHeader extends StatelessWidget {
   final String dateLabel;
   final String week;
   final String quote;
   final String nickname;
+  final String avatarPath;
   final VoidCallback onOpenDrawer;
 
   const HomeHeader({
@@ -16,6 +20,7 @@ class HomeHeader extends StatelessWidget {
     required this.week,
     required this.quote,
     required this.nickname,
+    required this.avatarPath,
     required this.onOpenDrawer,
   });
 
@@ -48,20 +53,25 @@ class HomeHeader extends StatelessWidget {
             ],
           ),
         ),
-        // 用户头像(点击开侧边栏;暂不支持自定义头像)
+        // 用户头像(点击开侧边栏;支持自定义头像图片)
         GestureDetector(
           onTap: onOpenDrawer,
           child: CircleAvatar(
             radius: 19,
             backgroundColor: AppColors.primaryLight,
-            child: Text(
-              nickname.isEmpty ? '?' : nickname.substring(0, 1),
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primaryDark,
-              ),
-            ),
+            foregroundImage: avatarPath.isNotEmpty
+                ? FileImage(File(avatarPath), scale: 1.0)
+                : null,
+            child: avatarPath.isEmpty
+                ? Text(
+                    nickname.isEmpty ? '?' : nickname.substring(0, 1),
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primaryDark,
+                    ),
+                  )
+                : null,
           ),
         ),
       ],

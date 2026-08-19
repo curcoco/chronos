@@ -45,6 +45,7 @@ class _HomePageState extends State<HomePage> {
   bool _loading = true;
   bool _savingNote = false; // 灵感速记保存去抖
   bool _showOnboarding = false; // 首次引导卡
+  String _avatarPath = ''; // 用户头像本地路径
   List<StudentTask> _tasks = [];
   int _coin = 0;
   int _todayEarned = 0;
@@ -59,12 +60,21 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _init();
+    // 侧边栏更换头像后刷新首页头像。
+    SettingsService.instance.avatarVersion.addListener(_onAvatarChanged);
   }
 
   @override
   void dispose() {
+    SettingsService.instance.avatarVersion.removeListener(_onAvatarChanged);
     _noteCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _onAvatarChanged() async {
+    final path = await SettingsService.instance.avatarPath();
+    if (!mounted) return;
+    setState(() => _avatarPath = path);
   }
 
   Future<void> _init() async {
@@ -76,6 +86,7 @@ class _HomePageState extends State<HomePage> {
       CoinService.instance.earnedToday(date),
       SettingsService.instance.nickname(),
       SettingsService.instance.isOnboardingDone(),
+      SettingsService.instance.avatarPath(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -84,6 +95,7 @@ class _HomePageState extends State<HomePage> {
       _todayEarned = results[2] as int;
       _nickname = results[3] as String;
       _showOnboarding = !(results[4] as bool);
+      _avatarPath = results[5] as String;
       _quote = DailyContent.quoteFor(date);
       _english = DailyContent.englishFor(now);
       _dateLabel = monthDayLabel(now);
@@ -242,6 +254,7 @@ class _HomePageState extends State<HomePage> {
                     week: _week,
                     quote: _quote,
                     nickname: _nickname,
+                    avatarPath: _avatarPath,
                     onOpenDrawer: () => Scaffold.of(context).openDrawer(),
                   ),
                   if (_showOnboarding) ...[

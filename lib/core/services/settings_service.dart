@@ -15,10 +15,14 @@ class SettingsService {
   static const String _kThemeMode = 'theme_mode';
   static const String _kOnboardingDone = 'onboarding_done';
   static const String _kLastBackupAt = 'last_backup_at';
+  static const String _kAvatarPath = 'avatar_path';
 
   /// 全局主题模式通知源:切换后 MaterialApp 监听并即时重建(无需重启)。
   final ValueNotifier<ThemeMode> themeMode =
       ValueNotifier<ThemeMode>(ThemeMode.system);
+
+  /// 头像变更通知:侧边栏改头像后自增,首页等监听刷新头像显示。
+  final ValueNotifier<int> avatarVersion = ValueNotifier<int>(0);
 
   // 随机昵称池:两字形容词 + 的 + 名词
   static const List<String> _adjectives = [
@@ -124,5 +128,17 @@ class SettingsService {
   Future<void> markBackupExported(DateTime time) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kLastBackupAt, time.toIso8601String());
+  }
+
+  /// 用户头像图片的本地文件路径(空 = 未设置,显示昵称首字)。
+  Future<String> avatarPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_kAvatarPath) ?? '';
+  }
+
+  Future<void> setAvatarPath(String path) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kAvatarPath, path);
+    avatarVersion.value++;
   }
 }
