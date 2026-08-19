@@ -5,6 +5,8 @@ import 'package:student_workbench/routes.dart';
 import 'package:student_workbench/core/services/settings_service.dart';
 import 'package:student_workbench/core/theme.dart';
 import 'package:student_workbench/core/utils/dates.dart';
+import 'package:student_workbench/features/chat/pages/chat_page.dart';
+import 'package:student_workbench/features/ledger/pages/ledger_page.dart';
 import 'package:student_workbench/features/shell/pages/main_shell.dart';
 import 'package:student_workbench/features/notes/pages/quick_note_page.dart';
 
@@ -148,37 +150,82 @@ class _SplashPageState extends State<SplashPage> {
                   },
                   child: const Text('开始今天 →'),
                 ),
-                const SizedBox(height: 12),
-                // 「快速记一笔」:一键直达灵感速记输入,不进首页。
-                // 返回后进入首页(不再停留在欢迎界面)。
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      await AppRoutes.push(context, const QuickNotePage(),
-                          dialog: true);
-                      if (!context.mounted) return;
-                      AppRoutes.pushReplacement(context, const MainShell());
-                    },
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
-                      foregroundColor: AppColors.primaryDark,
-                      side: BorderSide(
-                        color: AppColors.primary.withValues(alpha: 0.5),
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                const SizedBox(height: 16),
+                // 四个快捷入口:灵感速记 / 闲话铺 / 记账(返回后进入首页)。
+                // 首页由「开始今天」进入;速记/闲话铺/记账返回后均落到首页。
+                Row(
+                  children: [
+                    Expanded(
+                      child: _entryButton(
+                        icon: Icons.edit_note_rounded,
+                        label: '灵感速记',
+                        onTap: () async {
+                          await AppRoutes.push(context, const QuickNotePage(),
+                              dialog: true);
+                          if (!context.mounted) return;
+                          AppRoutes.pushReplacement(context, const MainShell());
+                        },
                       ),
                     ),
-                    icon: const Icon(Icons.edit_note_rounded, size: 20),
-                    label: const Text('快速记一笔'),
-                  ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _entryButton(
+                        icon: Icons.smart_toy_rounded,
+                        label: '闲话铺',
+                        onTap: () async {
+                          await AppRoutes.push(context, const ChatPage());
+                          if (!context.mounted) return;
+                          AppRoutes.pushReplacement(context, const MainShell());
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _entryButton(
+                        icon: Icons.account_balance_wallet_rounded,
+                        label: '记账',
+                        onTap: () async {
+                          await AppRoutes.push(context, const LedgerPage());
+                          if (!context.mounted) return;
+                          AppRoutes.pushReplacement(context, const MainShell());
+                        },
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 24),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// 启动页小入口按钮(图标 + 文字,竖排)。
+  Widget _entryButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return OutlinedButton(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(0, 64),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        foregroundColor: AppColors.primaryDark,
+        side: BorderSide(color: AppColors.primary.withValues(alpha: 0.5)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 20),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontSize: 12)),
+        ],
       ),
     );
   }

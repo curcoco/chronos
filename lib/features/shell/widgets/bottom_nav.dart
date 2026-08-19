@@ -2,18 +2,15 @@ import 'package:flutter/material.dart';
 
 import 'package:student_workbench/core/theme.dart';
 
-/// 底部导航栏:5 个槽位(首页 / 计划 / +号 / 知识 / 生活)。
-/// 中间的「+」号快捷键比其它按钮大一圈、微微浮起、视觉突出。
+/// 底部导航栏:5 个 Tab(首页 / 计划 / 灵感速记 / 记账 / 闲话铺)。
 class BottomNav extends StatelessWidget {
   final int index;
   final ValueChanged<int> onTap;
-  final VoidCallback onPlus;
 
   const BottomNav({
     super.key,
     required this.index,
     required this.onTap,
-    required this.onPlus,
   });
 
   @override
@@ -48,18 +45,23 @@ class BottomNav extends StatelessWidget {
                 selected: index == 1,
                 onTap: () => onTap(1),
               ),
-              _PlusButton(onTap: onPlus),
               _NavItem(
-                icon: Icons.school_rounded,
-                label: '知识',
+                icon: Icons.edit_note_rounded,
+                label: '灵感速记',
                 selected: index == 2,
                 onTap: () => onTap(2),
               ),
               _NavItem(
-                icon: Icons.emoji_emotions_rounded,
-                label: '生活',
+                icon: Icons.account_balance_wallet_rounded,
+                label: '记账',
                 selected: index == 3,
                 onTap: () => onTap(3),
+              ),
+              _NavItem(
+                icon: Icons.smart_toy_rounded,
+                label: '闲话铺',
+                selected: index == 4,
+                onTap: () => onTap(4),
               ),
             ],
           ),
@@ -103,52 +105,6 @@ class _NavItem extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 中间的 + 号快捷键:比其它按钮大一圈、微微浮起、视觉突出
-class _PlusButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _PlusButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Center(
-        child: Transform.translate(
-          offset: const Offset(0, -14),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: onTap,
-              customBorder: const CircleBorder(),
-              child: Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [AppColors.primaryLight, AppColors.primary],
-                  ),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.4),
-                      blurRadius: 14,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child:
-                    const Icon(Icons.add_rounded, size: 32, color: Colors.white),
-              ),
-            ),
-          ),
         ),
       ),
     );

@@ -8,9 +8,13 @@ import 'package:student_workbench/core/services/settings_service.dart';
 import 'package:student_workbench/core/services/update_installer.dart';
 import 'package:student_workbench/core/theme.dart';
 import 'package:student_workbench/features/settings/pages/extension_service_page.dart';
-import 'package:student_workbench/features/notes/pages/quick_note_page.dart';
 import 'package:student_workbench/features/settings/pages/settings_page.dart';
 import 'package:student_workbench/core/widgets/frosted_snack.dart';
+import 'package:student_workbench/features/coins/pages/coin_center_page.dart';
+import 'package:student_workbench/features/diary/pages/diary_page.dart';
+import 'package:student_workbench/features/english/pages/english_page.dart';
+import 'package:student_workbench/features/health/pages/health_page.dart';
+import 'package:student_workbench/features/review/pages/review_page.dart';
 
 /// 侧边栏:应用信息 + 版本与更新 + 导航快捷 + 系统设置入口。
 /// 水玻璃风格:整体半透明 + BackdropFilter 背景模糊,露出背后页面。
@@ -260,28 +264,29 @@ class _AppDrawerState extends State<AppDrawer> {
                   ),
                   _navTile(0, Icons.home_rounded, '首页'),
                   _navTile(1, Icons.checklist_rounded, '计划'),
-                  _navTile(2, Icons.school_rounded, '知识'),
-                  _navTile(3, Icons.emoji_emotions_rounded, '生活'),
-                  ListTile(
-                    leading: Icon(Icons.edit_note_rounded,
-                        size: 22, color: AppColors.textSub),
-                    title: Text(
-                      '灵感速记',
+                  _navTile(2, Icons.edit_note_rounded, '灵感速记'),
+                  _navTile(3, Icons.account_balance_wallet_rounded, '记账'),
+                  _navTile(4, Icons.smart_toy_rounded, '闲话铺'),
+                  const Divider(height: 1),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(20, 10, 20, 2),
+                    child: Text(
+                      '功能模块',
                       style: TextStyle(
-                          fontSize: 15,
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textMain),
+                          color: AppColors.textSub),
                     ),
-                    // 磨砂玻璃导航按钮
-                    tileColor: _glassColor(),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    onTap: () {
-                      Navigator.of(context).pop(); // 先关抽屉
-                      AppRoutes.push(context, const QuickNotePage(),
-                          dialog: true);
-                    },
                   ),
+                  // 其余模块入口(原知识/生活 Tab 的内容收进侧边栏)
+                  _moduleTile(Icons.translate_rounded, '英文积累', const EnglishPage()),
+                  _moduleTile(
+                      Icons.favorite_rounded, '健康管理', const HealthPage()),
+                  _moduleTile(Icons.task_alt_rounded, '每日复盘', const ReviewPage()),
+                  _moduleTile(
+                      Icons.menu_book_rounded, '写日记', const DiaryPage()),
+                  _moduleTile(
+                      Icons.monetization_on_rounded, '金币中心', const CoinCenterPage()),
                   const Divider(height: 1),
                   ListTile(
                     leading: Icon(Icons.settings_outlined,
@@ -343,6 +348,30 @@ class _AppDrawerState extends State<AppDrawer> {
       selectedTileColor: AppColors.primaryLight.withValues(alpha: 0.45),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onTap: () => widget.onSelectTab(index),
+    );
+  }
+
+  /// 功能模块入口:关抽屉后 push 模块页。
+  Widget _moduleTile(IconData icon, String label, Widget page) {
+    return ListTile(
+      leading: Icon(icon, size: 22, color: AppColors.textSub),
+      title: Text(
+        label,
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textMain,
+        ),
+      ),
+      trailing:
+          Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textSub),
+      // 磨砂玻璃导航按钮
+      tileColor: _glassColor(),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onTap: () {
+        Navigator.of(context).pop(); // 先关抽屉
+        AppRoutes.push(context, page);
+      },
     );
   }
 }
