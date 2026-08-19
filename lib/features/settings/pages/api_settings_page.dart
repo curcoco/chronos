@@ -4,7 +4,7 @@ import 'package:student_workbench/core/services/key_store.dart';
 import 'package:student_workbench/core/theme.dart';
 import 'package:student_workbench/core/widgets/frosted_snack.dart';
 
-/// API 配置:中转站 / elevenlabs / 心知天气 / Supabase 的地址与密钥。
+/// API 配置:中转站 / elevenlabs / 心知天气 / 外置记忆(Nocturne)的地址与密钥。
 /// 全部存本机(SharedPreferences),不入源码;密钥输入框默认遮显。
 class ApiSettingsPage extends StatefulWidget {
   const ApiSettingsPage({super.key});
@@ -19,7 +19,6 @@ class _ApiSettingsPageState extends State<ApiSettingsPage> {
     KeyStore.llmApiKey,
     KeyStore.elevenApiKey,
     KeyStore.weatherApiKey,
-    KeyStore.supabaseAnonKey,
     KeyStore.nocturneToken,
   };
   final Set<String> _revealed = {};
@@ -32,8 +31,6 @@ class _ApiSettingsPageState extends State<ApiSettingsPage> {
     KeyStore.elevenApiKey: 'elevenlabs API Key',
     KeyStore.elevenVoiceId: '语音 ID',
     KeyStore.weatherApiKey: '心知天气 Key',
-    KeyStore.supabaseUrl: 'Supabase 地址',
-    KeyStore.supabaseAnonKey: 'Supabase anon key',
     KeyStore.nocturneUrl: '外置记忆地址',
     KeyStore.nocturneToken: '外置记忆 token',
   };
@@ -46,8 +43,6 @@ class _ApiSettingsPageState extends State<ApiSettingsPage> {
     KeyStore.elevenApiKey: 'sk_…',
     KeyStore.elevenVoiceId: '如 BqljjWyTnrioXPCNkCd4',
     KeyStore.weatherApiKey: '心知天气私钥',
-    KeyStore.supabaseUrl: 'https://….supabase.co',
-    KeyStore.supabaseAnonKey: 'eyJ…(anon public key)',
     KeyStore.nocturneUrl: 'http://host:8000/mcp(Nocturne MCP)',
     KeyStore.nocturneToken: 'MCP 访问鉴权 token',
   };

@@ -1,22 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:student_workbench/routes.dart';
 import 'package:student_workbench/core/services/key_store.dart';
 import 'package:student_workbench/core/theme.dart';
 import 'package:student_workbench/core/widgets/frosted_snack.dart';
 import 'package:student_workbench/core/widgets/section_card.dart';
+import 'package:student_workbench/features/chat/services/nocturne_service.dart';
 
-/// 拓展服务页(隐藏入口):仅特定用户可用。
+/// 外置记忆服务页(隐藏入口):配置用户自部署的 Nocturne Memory Core
+/// (Ombre Brain 二改项目,MCP 长期记忆服务)。
 /// 入口:系统设置或侧边栏的 Chronos 图标连点 7 下 → 输入 6 位数字密码。
-/// 在此填写 Supabase URL / anon Key 后,可开启「云端 AI 长期记忆」;
-/// 开启后,零时闲话铺的 AI 长期记忆页才会出现「自动上传云端」模块。
+/// 与「系统设置 → API 配置 → 外置记忆」字段一致,这里提供连通性测试。
 class ExtensionServicePage extends StatefulWidget {
   const ExtensionServicePage({super.key});
-
-  /// 云端记忆总开关的持久化键(记忆页据此决定是否显示自动上传模块)。
-  static const String prefCloudMemoryEnabled = 'ext_cloud_memory_enabled';
 
   @override
   State<ExtensionServicePage> createState() => _ExtensionServicePageState();
@@ -24,10 +21,10 @@ class ExtensionServicePage extends StatefulWidget {
 
 class _ExtensionServicePageState extends State<ExtensionServicePage> {
   final TextEditingController _urlCtrl = TextEditingController();
-  final TextEditingController _keyCtrl = TextEditingController();
-  bool _revealKey = false;
-  bool _cloudEnabled = false;
+  final TextEditingController _tokenCtrl = TextEditingController();
+  bool _revealToken = false;
   bool _loading = true;
+  bool _testing = false;
 
   @override
   void initState() {
@@ -38,54 +35,43 @@ class _ExtensionServicePageState extends State<ExtensionServicePage> {
   @override
   void dispose() {
     _urlCtrl.dispose();
-    _keyCtrl.dispose();
+    _tokenCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
-    final url = await KeyStore.instance.get(KeyStore.supabaseUrl);
-    final key = await KeyStore.instance.get(KeyStore.supabaseAnonKey);
-    final prefs = await SharedPreferences.getInstance();
-    final enabled =
-        prefs.getBool(ExtensionServicePage.prefCloudMemoryEnabled) ?? false;
+    final url = await KeyStore.instance.get(KeyStore.nocturneUrl);
+    final token = await KeyStore.instance.get(KeyStore.nocturneToken);
     if (!mounted) return;
     setState(() {
       _urlCtrl.text = url;
-      _keyCtrl.text = key;
-      _cloudEnabled = enabled;
+      _tokenCtrl.text = token;
       _loading = false;
     });
   }
 
   Future<void> _saveConfig() async {
-    await KeyStore.instance.set(KeyStore.supabaseUrl, _urlCtrl.text);
-    await KeyStore.instance.set(KeyStore.supabaseAnonKey, _keyCtrl.text);
+    await KeyStore.instance.set(KeyStore.nocturneUrl, _urlCtrl.text);
+    await KeyStore.instance.set(KeyStore.nocturneToken, _tokenCtrl.text);
     if (!mounted) return;
-    showFrostedSnack(context, '云端配置已保存(仅存本机)');
+    showFrostedSnack(context, '外置记忆配置已保存(仅存本机)');
   }
 
-  Future<void> _toggleCloud(bool v) async {
-    if (v) {
-      // 开启前要求已填写 URL 与 Key
-      if (_urlCtrl.text.trim().isEmpty || _keyCtrl.text.trim().isEmpty) {
-        showFrostedSnack(context, '请先填写 Supabase 地址与 anon Key');
-        return;
-      }
-      // 开启即把当前输入写入本机,确保记忆页可用
-      await _saveConfig();
-    }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(ExtensionServicePage.prefCloudMemoryEnabled, v);
+  Future<void> _test() async {
+    if (_testing) return;
+    await _saveConfig();
+    setState(() => _testing = true);
+    final ok = await NocturneService.instance.probe();
     if (!mounted) return;
-    setState(() => _cloudEnabled = v);
+    setState(() => _testing = false);
     showFrostedSnack(
-        context, v ? '已开启云端 AI 长期记忆服务' : '已关闭(记忆仍保留在本地)');
+        context, ok ? '连接成功,外置记忆服务可用' : '连接失败,请检查地址 / token / 服务器状态');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('拓展服务')),
+      appBar: AppBar(title: const Text('外置记忆服务')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -98,9 +84,10 @@ class _ExtensionServicePageState extends State<ExtensionServicePage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '云端 AI 长期记忆为进阶服务,仅面向特定用户开放。'
-                    '填写自己的 Supabase 地址与 anon Key 后开启,'
-                    '记忆将可跨设备同步。所有信息仅保存在本机。',
+                    '外置记忆服务为进阶功能:连接你自己部署的 Nocturne Memory Core'
+                    '(MCP 长期记忆服务,Ombre Brain 二改)。配置后,小掌柜的'
+                    '记忆检索与写入会额外走外置记忆库;未配置或不可用时,'
+                    '自动使用本机内置记忆,不影响聊天。所有信息仅保存在本机。',
                     style: TextStyle(
                         fontSize: 12,
                         height: 1.5,
@@ -109,7 +96,7 @@ class _ExtensionServicePageState extends State<ExtensionServicePage> {
                 ),
                 const SizedBox(height: 14),
                 SectionCard(
-                  title: 'Supabase 连接',
+                  title: 'Nocturne 连接',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -118,31 +105,32 @@ class _ExtensionServicePageState extends State<ExtensionServicePage> {
                         autocorrect: false,
                         enableSuggestions: false,
                         decoration: const InputDecoration(
-                          labelText: 'Supabase 地址',
-                          hintText: 'https://….supabase.co',
+                          labelText: '服务地址',
+                          hintText: 'http://host:8000/mcp',
+                          helperText: 'Streamable HTTP 端点',
                           isDense: true,
                         ),
                       ),
                       const SizedBox(height: 12),
                       TextField(
-                        controller: _keyCtrl,
-                        obscureText: !_revealKey,
+                        controller: _tokenCtrl,
+                        obscureText: !_revealToken,
                         autocorrect: false,
                         enableSuggestions: false,
                         decoration: InputDecoration(
-                          labelText: 'Supabase anon Key',
-                          hintText: 'eyJ…(anon public key)',
+                          labelText: 'Bearer token',
+                          hintText: '访问鉴权 token',
                           isDense: true,
                           suffixIcon: IconButton(
                             icon: Icon(
-                              _revealKey
+                              _revealToken
                                   ? Icons.visibility_off_rounded
                                   : Icons.visibility_rounded,
                               size: 18,
                               color: AppColors.textSub,
                             ),
                             onPressed: () =>
-                                setState(() => _revealKey = !_revealKey),
+                                setState(() => _revealToken = !_revealToken),
                           ),
                         ),
                       ),
@@ -155,41 +143,22 @@ class _ExtensionServicePageState extends State<ExtensionServicePage> {
                           label: const Text('保存配置'),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                SectionCard(
-                  title: '云端 AI 长期记忆',
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '开启云端记忆服务',
-                              style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textMain),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '开启后,可在 零时闲话铺 → AI 长期记忆 页看到'
-                              '「自动上传云端」模块。',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  height: 1.5,
-                                  color: AppColors.textSub),
-                            ),
-                          ],
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: _testing ? null : _test,
+                          icon: _testing
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.wifi_tethering_rounded,
+                                  size: 18),
+                          label: Text(_testing ? '正在测试…' : '测试连接'),
                         ),
-                      ),
-                      Switch(
-                        value: _cloudEnabled,
-                        activeThumbColor: AppColors.primary,
-                        onChanged: _toggleCloud,
                       ),
                     ],
                   ),
@@ -200,7 +169,7 @@ class _ExtensionServicePageState extends State<ExtensionServicePage> {
   }
 }
 
-/// 隐藏入口辅助:Chronos 图标连点计数器 + 6 位密码校验 → 进拓展服务页。
+/// 隐藏入口辅助:Chronos 图标连点计数器 + 6 位密码校验 → 进外置记忆服务页。
 /// 用法:把要连点的图标包进 [SecretUnlockTap]。
 class SecretUnlockTap extends StatefulWidget {
   final Widget child;
@@ -237,7 +206,7 @@ class _SecretUnlockTapState extends State<SecretUnlockTap> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        title: const Text('拓展服务'),
+        title: const Text('外置记忆服务'),
         content: TextField(
           controller: ctrl,
           autofocus: true,

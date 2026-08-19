@@ -23,6 +23,8 @@ import 'package:student_workbench/features/tasks/widgets/task_confirm_dialog.dar
 import 'package:student_workbench/features/settings/pages/api_settings_page.dart';
 import 'package:student_workbench/features/coins/pages/coin_center_page.dart';
 import 'package:student_workbench/features/diary/pages/diary_page.dart';
+import 'package:student_workbench/features/ledger/services/ledger_service.dart';
+import 'package:student_workbench/features/ledger/widgets/ledger_entry_sheet.dart';
 
 /// 首页仪表盘:今日任务概览 / 灵感快捷速记 / 每日英语一句 / 金币入口。
 /// 各卡片 UI 拆到 widgets/home/ 下的独立组件,本页只负责状态加载与组装。
@@ -185,6 +187,39 @@ class _HomePageState extends State<HomePage> {
     await AppRoutes.push(context, const ApiSettingsPage());
   }
 
+  /// 首页「记一笔」快捷入口:直接弹记账弹层,保存后打卡。
+  Future<void> _quickLedger() async {
+    final result = await showModalBottomSheet<
+        ({String type, double amount, String category, String note, String date})>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => LedgerEntrySheet(customCats: const []),
+    );
+    if (result == null || !mounted) return;
+    await LedgerService().addTxn(
+      type: result.type,
+      amount: result.amount,
+      category: result.category,
+      note: result.note,
+      date: result.date,
+    );
+    // 当天记一笔 → 记账打卡(每日一次,受金币上限约束)
+    if (result.date == todayStr()) {
+      final coin =
+          await CoinService.instance.rewardLedgerCheckin(todayStr());
+      if (!mounted) return;
+      _showSnack(coin > 0 ? '已记一笔,打卡成功,金币 +$coin' : '已记一笔');
+    } else {
+      if (!mounted) return;
+      _showSnack('已记一笔');
+    }
+    await _reload();
+  }
+
   Future<void> _closeOnboarding() async {
     await SettingsService.instance.setOnboardingDone();
     if (!mounted) return;
@@ -230,6 +265,25 @@ class _HomePageState extends State<HomePage> {
                     coin: _coin,
                     todayEarned: _todayEarned,
                     onTap: _openCoinCenter,
+                  ),
+                  const SizedBox(height: 10),
+                  // 记账快捷入口:一键直达「记一笔」弹层,无需进记账页
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(44),
+                        foregroundColor: AppColors.primaryDark,
+                        side: BorderSide(
+                            color: AppColors.primary.withValues(alpha: 0.5)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
+                      ),
+                      onPressed: _quickLedger,
+                      icon:
+                          const Icon(Icons.edit_note_rounded, size: 18),
+                      label: const Text('记一笔'),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   HomeTodayCard(

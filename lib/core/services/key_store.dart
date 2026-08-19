@@ -13,8 +13,6 @@ class KeyStore {
   static const String elevenApiKey = 'eleven_api_key';
   static const String elevenVoiceId = 'eleven_voice_id';
   static const String weatherApiKey = 'weather_api_key';
-  static const String supabaseUrl = 'supabase_url';
-  static const String supabaseAnonKey = 'supabase_anon_key';
   static const String nocturneUrl = 'nocturne_url';
   static const String nocturneToken = 'nocturne_token';
   static const String updateCheckUrl = 'update_check_url';
@@ -27,8 +25,6 @@ class KeyStore {
     elevenApiKey,
     elevenVoiceId,
     weatherApiKey,
-    supabaseUrl,
-    supabaseAnonKey,
     nocturneUrl,
     nocturneToken,
     updateCheckUrl,

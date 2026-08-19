@@ -149,13 +149,16 @@ class _SplashPageState extends State<SplashPage> {
                   child: const Text('开始今天 →'),
                 ),
                 const SizedBox(height: 12),
-                // 「快速记一笔」:一键直达灵感速记输入,不进首页
+                // 「快速记一笔」:一键直达灵感速记输入,不进首页。
+                // 返回后进入首页(不再停留在欢迎界面)。
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: () {
-                      AppRoutes.push(context, const QuickNotePage(),
+                    onPressed: () async {
+                      await AppRoutes.push(context, const QuickNotePage(),
                           dialog: true);
+                      if (!context.mounted) return;
+                      AppRoutes.pushReplacement(context, const MainShell());
                     },
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size.fromHeight(48),

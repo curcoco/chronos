@@ -3,7 +3,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:student_workbench/features/memory/models/memory_item.dart';
 import 'package:student_workbench/core/services/db_helper.dart';
 
-/// AI 长期记忆服务(本地 SQLite 为主;云端同步由 SupabaseSyncService 负责)
+/// AI 长期记忆服务(本地 SQLite 为主;外置记忆见 NocturneService)
 class MemoryService {
   MemoryService._();
   static final MemoryService instance = MemoryService._();
@@ -56,19 +56,6 @@ class MemoryService {
   Future<void> delete(int id) async {
     final db = await _db.database;
     await db.delete('memories', where: 'id = ?', whereArgs: [id]);
-  }
-
-  Future<void> markSynced(int id) async {
-    final db = await _db.database;
-    await db.update('memories', {'cloud_synced': 1},
-        where: 'id = ?', whereArgs: [id]);
-  }
-
-  Future<List<MemoryItem>> unsynced() async {
-    final db = await _db.database;
-    final rows = await db.query('memories',
-        where: 'cloud_synced = 0', orderBy: 'created_at ASC');
-    return rows.map(MemoryItem.fromMap).toList();
   }
 
   /// 编辑一条记忆的内容

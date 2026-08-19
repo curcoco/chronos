@@ -6,7 +6,7 @@ class MemoryItem {
   final String content;
   /// manual=手动 chat=对话提炼
   final String source;
-  /// 是否已同步到云端(Supabase)
+  /// 历史字段(原 Supabase 云同步标记;列保留兼容旧数据,不再使用)
   final bool cloudSynced;
   final int createdAt;
   final int updatedAt;
