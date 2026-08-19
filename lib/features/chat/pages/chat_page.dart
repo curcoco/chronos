@@ -7,6 +7,7 @@ import 'package:student_workbench/features/chat/pages/session_list_page.dart';
 import 'package:student_workbench/features/chat/services/chat_service.dart';
 import 'package:student_workbench/features/chat/services/eleven_service.dart';
 import 'package:student_workbench/features/chat/services/llm_service.dart';
+import 'package:student_workbench/features/chat/services/nocturne_service.dart';
 import 'package:student_workbench/features/memory/services/memory_service.dart';
 import 'package:student_workbench/features/notes/services/note_service.dart';
 import 'package:student_workbench/features/tasks/services/task_service.dart';
@@ -170,7 +171,13 @@ class _ChatPageState extends State<ChatPage> {
       // 注入长期记忆(RikkaHub 式相关条目):用最近的用户消息做关键词匹配,
       // 只注入相关记忆,避免记忆多了上下文膨胀。
       final query = _recentUserText();
-      final memory = await MemoryService.instance.promptSectionFor(query);
+      var memory = await MemoryService.instance.promptSectionFor(query);
+      // 外置记忆(Nocturne MCP,用户自配):可用时额外注入检索结果,失败静默。
+      final external =
+          await NocturneService.instance.breath(query.isNotEmpty ? query : '最近话题');
+      if (external != null && external.isNotEmpty) {
+        memory = '$memory\n\n【外置记忆检索】\n$external';
+      }
       final reply = await LlmService.instance.chat(
         history: _recentContext(),
         persona: _persona + memory,
@@ -201,11 +208,18 @@ class _ChatPageState extends State<ChatPage> {
     return '';
   }
 
-  /// 自动提炼:用最近对话更新长期记忆。失败静默(不打断聊天)。
+  /// 自动提炼:用最近对话更新长期记忆(本地);若配置了外置记忆(Nocturne),
+  /// 提炼出的新条目同时 hold 到外置。失败静默(不打断聊天)。
   Future<void> _autoExtract() async {
     try {
-      await MemoryExtractor.instance
+      final result = await MemoryExtractor.instance
           .extractFrom(_messages.sublist(0, _messages.length));
+      // 外置记忆同步(用户自配;未配置/失败自动忽略)。
+      if (result.added > 0) {
+        for (final item in result.addedItems) {
+          await NocturneService.instance.hold(item);
+        }
+      }
     } catch (_) {
       // 提炼失败不影响聊天,下次对话会再试。
     }

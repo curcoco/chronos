@@ -180,11 +180,11 @@ class _MemoryPageState extends State<MemoryPage> {
     setState(() => _extracting = true);
     _showSnack('正在提炼记忆…');
     try {
-      final added =
+      final result =
           await MemoryExtractor.instance.extractFrom(history);
       await _reload();
       if (!mounted) return;
-      _showSnack(added > 0 ? '已提炼 $added 条记忆' : '本次没有提炼到新记忆');
+      _showSnack(result.added > 0 ? '已提炼 ${result.added} 条记忆' : '本次没有提炼到新记忆');
     } catch (_) {
       if (!mounted) return;
       _showSnack('提炼失败,请检查网络或配置');

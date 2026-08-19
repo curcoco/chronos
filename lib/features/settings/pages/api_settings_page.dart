@@ -20,6 +20,7 @@ class _ApiSettingsPageState extends State<ApiSettingsPage> {
     KeyStore.elevenApiKey,
     KeyStore.weatherApiKey,
     KeyStore.supabaseAnonKey,
+    KeyStore.nocturneToken,
   };
   final Set<String> _revealed = {};
 
@@ -33,6 +34,8 @@ class _ApiSettingsPageState extends State<ApiSettingsPage> {
     KeyStore.weatherApiKey: '心知天气 Key',
     KeyStore.supabaseUrl: 'Supabase 地址',
     KeyStore.supabaseAnonKey: 'Supabase anon key',
+    KeyStore.nocturneUrl: '外置记忆地址',
+    KeyStore.nocturneToken: '外置记忆 token',
   };
 
   static const Map<String, String> _hints = {
@@ -45,6 +48,8 @@ class _ApiSettingsPageState extends State<ApiSettingsPage> {
     KeyStore.weatherApiKey: '心知天气私钥',
     KeyStore.supabaseUrl: 'https://….supabase.co',
     KeyStore.supabaseAnonKey: 'eyJ…(anon public key)',
+    KeyStore.nocturneUrl: 'http://host:8000/mcp(Nocturne MCP)',
+    KeyStore.nocturneToken: 'MCP 访问鉴权 token',
   };
 
   @override
