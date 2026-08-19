@@ -176,4 +176,74 @@ void main() {
       expect(back.mood, 'sad');
     });
   });
+
+  group('DB 迁移 v12:闲话铺会话表', () {
+    Future<Database> openV11() async {
+      final db = await databaseFactory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(version: 11),
+      );
+      await db.execute('''
+        CREATE TABLE tasks(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          task_date TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        )
+      ''');
+      return db;
+    }
+
+    test('迁移后创建 chat_sessions / chat_messages 并可读写', () async {
+      final db = await openV11();
+      await DbHelper.runMigrations(db, 11, DbHelper.dbVersion);
+
+      final now = 1000;
+      final sid = await db.insert('chat_sessions', {
+        'title': '闲聊',
+        'created_at': now,
+        'updated_at': now,
+      });
+      expect(sid, greaterThan(0));
+
+      final mid = await db.insert('chat_messages', {
+        'session_id': sid,
+        'role': 'user',
+        'content': '你好',
+        'created_at': now,
+      });
+      expect(mid, greaterThan(0));
+
+      final msgs = await db.query('chat_messages',
+          where: 'session_id = ?', whereArgs: [sid]);
+      expect(msgs.length, 1);
+      expect(msgs.first['content'], '你好');
+
+      // 跨天不清空:迁移后插入不同日期的消息仍保留(取消零点清零)。
+      final later = await db.insert('chat_messages', {
+        'session_id': sid,
+        'role': 'assistant',
+        'content': '在的',
+        'created_at': now + 86400000,
+      });
+      expect(later, greaterThan(0));
+      final all = await db.query('chat_messages',
+          where: 'session_id = ?', whereArgs: [sid]);
+      expect(all.length, 2);
+      await db.close();
+    });
+
+    test('已含会话表的库再次迁移不报错(幂等)', () async {
+      final db = await openV11();
+      // 第一次:11 → 12 建表。
+      await DbHelper.runMigrations(db, 11, DbHelper.dbVersion);
+      // 第二次:模拟数据库已到 12,再次调用不重复建表、不报错。
+      await DbHelper.runMigrations(db, 12, DbHelper.dbVersion);
+      final tables = await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table'");
+      final names = tables.map((r) => r['name'] as String).toSet();
+      expect(names.containsAll({'chat_sessions', 'chat_messages'}), isTrue);
+      await db.close();
+    });
+  });
 }

@@ -1,10 +1,10 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:student_workbench/core/config/api_config.dart';
 import 'package:student_workbench/routes.dart';
+import 'package:student_workbench/features/chat/pages/session_list_page.dart';
+import 'package:student_workbench/features/chat/services/chat_service.dart';
 import 'package:student_workbench/features/chat/services/eleven_service.dart';
 import 'package:student_workbench/features/chat/services/llm_service.dart';
 import 'package:student_workbench/features/memory/services/memory_service.dart';
@@ -17,19 +17,22 @@ import 'package:student_workbench/core/widgets/frosted_snack.dart';
 import 'package:student_workbench/features/settings/pages/api_settings_page.dart';
 import 'package:student_workbench/features/memory/pages/memory_page.dart';
 
-/// 零时闲话铺:与 AI 聊天(中转站大模型),AI 回复可语音朗读(elevenlabs)
-/// 每日对话当天清空(零点万事清零)。
+/// 零时闲话铺:与 AI 聊天(中转站大模型),AI 回复可语音朗读(elevenlabs)。
+/// 会话按窗口长期保存(v12 起取消「零点万事清零」);[initialSessionId] 非空时
+/// 直接绑定该会话,为空时进入先选择/新建会话。
 class ChatPage extends StatefulWidget {
-  const ChatPage({super.key});
+  final int? initialSessionId;
+
+  const ChatPage({super.key, this.initialSessionId});
 
   @override
   State<ChatPage> createState() => _ChatPageState();
 }
 
 class _ChatPageState extends State<ChatPage> {
-  static const String _kDate = 'chat_date';
-  static const String _kMessages = 'chat_messages';
   static const String _kPersona = 'chat_persona';
+
+  final ChatService _chatService = ChatService.instance;
 
   /// 本地工具(函数调用):模型可查询天气 / 今日任务 / 灵感记录
   static const List<Map<String, dynamic>> _tools = [
@@ -72,9 +75,11 @@ class _ChatPageState extends State<ChatPage> {
   final ScrollController _scroll = ScrollController();
 
   /// 发送给模型的最大历史条数:仅保留最近 N 条,控制 token 成本与延迟。
-  /// (本地仍完整展示当天对话;只裁剪"喂给模型"的上下文。)
+  /// (本地仍完整展示会话;只裁剪"喂给模型"的上下文。)
   static const int _maxContextMessages = 20;
 
+  int? _sessionId; // 当前绑定的会话;null = 尚未选择/初始化
+  bool _binding = true; // 正在初始化/选择会话
   List<({String role, String content})> _messages = [];
   String _persona = ApiConfig.defaultPersona;
   bool _sending = false;
@@ -94,40 +99,38 @@ class _ChatPageState extends State<ChatPage> {
     super.dispose();
   }
 
+  /// 初始化:绑定会话(优先 initialSessionId → 弹列表选择/新建 → 读取消息)。
   Future<void> _init() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedDate = prefs.getString(_kDate);
-    final today = todayStr();
-    var messages = <({String role, String content})>[];
-    if (savedDate == today) {
-      final raw = prefs.getString(_kMessages);
-      if (raw != null && raw.isNotEmpty) {
-        try {
-          final list = jsonDecode(raw) as List;
-          messages = [
-            for (final m in list.cast<Map<String, dynamic>>())
-              (role: m['role'] as String, content: m['content'] as String),
-          ];
-        } catch (_) {
-          messages = [];
-        }
+    var sessionId = widget.initialSessionId;
+    if (sessionId == null) {
+      final picked = await Navigator.of(context).push<int>(
+        MaterialPageRoute(builder: (_) => const SessionListPage()),
+      );
+      if (!mounted) return;
+      if (picked == null) {
+        // 用户直接返回:仍需要一个会话才能聊天,创建一个空的兜底。
+        sessionId = await _chatService.createSession();
+      } else {
+        sessionId = picked;
       }
     }
-    // 跨天自动清空(零点万事清零)
-    if (savedDate != today) {
-      await prefs.remove(_kMessages);
-    }
-    await prefs.setString(_kDate, today);
+    final msgs = await _chatService.messages(sessionId);
+    final prefs = await SharedPreferences.getInstance();
     final persona = prefs.getString(_kPersona);
     final llmOk = await LlmService.instance.isConfigured();
     if (!mounted) return;
     setState(() {
+      _sessionId = sessionId;
+      _messages = [
+        for (final m in msgs) (role: m.role, content: m.content),
+      ];
       _persona = (persona == null || persona.isEmpty)
           ? ApiConfig.defaultPersona
           : persona;
-      _messages = messages;
       _llmOk = llmOk;
+      _binding = false;
     });
+    _scrollToBottom();
   }
 
   /// 打开 API 配置页,返回后刷新配置状态
@@ -138,19 +141,17 @@ class _ChatPageState extends State<ChatPage> {
     setState(() => _llmOk = llmOk);
   }
 
-  Future<void> _save() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-        _kMessages,
-        jsonEncode([
-          for (final m in _messages)
-            {'role': m.role, 'content': m.content},
-        ]));
+  /// 追加消息并持久化到当前会话
+  Future<void> _appendMessage(String role, String content) async {
+    final sid = _sessionId;
+    if (sid == null) return;
+    await _chatService.addMessage(
+        sessionId: sid, role: role, content: content);
   }
 
   Future<void> _send() async {
     final text = _ctrl.text.trim();
-    if (text.isEmpty || _sending) return;
+    if (text.isEmpty || _sending || _sessionId == null) return;
     final llmOk = await LlmService.instance.isConfigured();
     if (!mounted) return;
     if (!llmOk) {
@@ -162,6 +163,7 @@ class _ChatPageState extends State<ChatPage> {
       _messages.add((role: 'user', content: text));
       _sending = true;
     });
+    await _appendMessage('user', text);
     _scrollToBottom();
     try {
       // 注入长期记忆(画像/事实/摘要),让 AI 记住用户
@@ -177,7 +179,7 @@ class _ChatPageState extends State<ChatPage> {
         _messages.add((role: 'assistant', content: reply));
         _sending = false;
       });
-      await _save();
+      await _appendMessage('assistant', reply);
       _scrollToBottom();
     } catch (e) {
       if (!mounted) return;
@@ -288,6 +290,24 @@ class _ChatPageState extends State<ChatPage> {
         title: const Text('零时闲话铺'),
         actions: [
           IconButton(
+            onPressed: () async {
+              final picked = await AppRoutes.push<int>(
+                  context, const SessionListPage());
+              if (picked == null || !mounted) return;
+              final msgs = await _chatService.messages(picked);
+              if (!mounted) return;
+              setState(() {
+                _sessionId = picked;
+                _messages = [
+                  for (final m in msgs) (role: m.role, content: m.content),
+                ];
+              });
+              _scrollToBottom();
+            },
+            icon: const Icon(Icons.forum_outlined, size: 20),
+            tooltip: '会话记录',
+          ),
+          IconButton(
             onPressed: () {
               AppRoutes.push(context, const MemoryPage());
             },
@@ -302,8 +322,10 @@ class _ChatPageState extends State<ChatPage> {
         ],
       ),
       body: SafeArea(
-        child: Column(
-          children: [
+        child: _binding
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
             if (!_llmOk)
               InkWell(
                 onTap: _openApiSettings,
@@ -327,7 +349,7 @@ class _ChatPageState extends State<ChatPage> {
                   _bubble(
                     content:
                         '欢迎光临零时闲话铺,铺子里的我见多识广,专业在线,玩笑不断。'
-                        '本店铁律:午夜零点准时打烊,闲谈限时寄存,零点万事清零。',
+                        '这里的对话会按会话保存,随时可以回来接着聊。',
                     mine: false,
                   ),
                   const SizedBox(height: 10),

@@ -9,7 +9,7 @@ class DbHelper {
   static final DbHelper instance = DbHelper._();
 
   /// 当前数据库版本(结构变更时递增)
-  static const int dbVersion = 11;
+  static const int dbVersion = 12;
 
   Database? _db;
 
@@ -135,6 +135,11 @@ class DbHelper {
     // 已有该列的升级用户不受影响。
     if (oldVersion < 11) {
       await _ensureNotesColumns(db);
+    }
+    // v12:闲话铺会话管理 —— 取消「零点万事清零」,聊天按会话长期保存。
+    // chat_sessions:会话(标题/创建/更新时间);chat_messages:会话内消息。
+    if (oldVersion < 12) {
+      await _createChatTables(db);
     }
   }
 
@@ -341,5 +346,30 @@ class DbHelper {
     await db.execute(
         'CREATE INDEX idx_diary_date ON diary_entries(entry_date)');
     await _createPlanTable(db);
+    await _createChatTables(db);
+  }
+
+  /// 闲话铺会话表:chat_sessions(会话)+ chat_messages(消息)。
+  /// v12 起取消「零点万事清零」,聊天按会话长期保存。
+  static Future<void> _createChatTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE chat_sessions(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE chat_messages(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX idx_chat_msg_session ON chat_messages(session_id)');
   }
 }

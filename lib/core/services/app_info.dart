@@ -31,14 +31,14 @@ class AppInfo {
   AppInfo._();
 
   /// 离线兜底用的「最新版本」参照,每次发版时与 pubspec.yaml 的 version 同步更新。
-  static const String latestVersion = '1.8.0';
+  static const String latestVersion = '1.9.0';
 
-  /// 更新检查地址:托管一个 HTTPS 可达的 latest.json,内容形如
+  /// 更新检查地址:托管一个可达的 latest.json,内容形如
   /// {"version":"1.2.0","note":"…","apk":"https://…/chronos-1.2.0.apk"}
-  /// 更新源:GitHub 仓库 curcoco/chronos。latest.json 走 raw 直链读取,
-  /// APK 放在对应 Release 的附件里(见 apk 字段)。
+  /// 更新源:阿里云服务器 120.76.230.67 的静态更新源(chronos-update 服务,
+  /// 端口 18011)。latest.json 与 APK 都放服务器 /opt/chronos-update/ 目录。
   static const String updateCheckUrl =
-      'https://raw.githubusercontent.com/curcoco/chronos/main/latest.json';
+      'http://120.76.230.67:18011/latest.json';
 
   /// 从打包进 APK 的 pubspec.yaml 读取安装版本(如 1.2.0+3 → 1.2.0)
   static Future<String> installedVersion() async {

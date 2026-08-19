@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0",
-  "note": "重大更新:代码架构重构为功能分区(core + features),后续维护更快;今日清单支持取消任务、已完成任务不可操作;首页任务卡固定展示 3 条可上滑;底部提示条改为自绘动画(滑入滑出);侧边栏水玻璃效果;新增首次使用引导、上次备份时间提醒;记账明细滚动加载更流畅",
-  "apk": "https://github.com/curcoco/chronos/releases/download/v1.8.0/chronos-1.8.0.apk"
+  "version": "1.9.0",
+  "note": "1.9.0 更新说明待新版本确定后补全",
+  "apk": "http://120.76.230.67:18011/chronos-1.9.0.apk"
 }
