@@ -9,7 +9,7 @@ class DbHelper {
   static final DbHelper instance = DbHelper._();
 
   /// 当前数据库版本(结构变更时递增)
-  static const int dbVersion = 12;
+  static const int dbVersion = 13;
 
   Database? _db;
 
@@ -140,6 +140,10 @@ class DbHelper {
     // chat_sessions:会话(标题/创建/更新时间);chat_messages:会话内消息。
     if (oldVersion < 12) {
       await _createChatTables(db);
+    }
+    // v13:健康-视频跟练支持用户自传视频(user_videos 表)。
+    if (oldVersion < 13) {
+      await _createUserVideosTable(db);
     }
   }
 
@@ -347,6 +351,20 @@ class DbHelper {
         'CREATE INDEX idx_diary_date ON diary_entries(entry_date)');
     await _createPlanTable(db);
     await _createChatTables(db);
+    await _createUserVideosTable(db);
+  }
+
+  /// 用户自传跟练视频表(标题/本地文件路径/备注)。
+  static Future<void> _createUserVideosTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE user_videos(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        path TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL
+      )
+    ''');
   }
 
   /// 闲话铺会话表:chat_sessions(会话)+ chat_messages(消息)。

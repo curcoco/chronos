@@ -14,10 +14,15 @@ void main() {
     databaseFactory = databaseFactoryFfi;
   });
 
+  /// 每个测试用独立的内存库路径,避免跨测试共享(表残留/重复建表)。
+  var _memSeq = 0;
+  String uniqueMemPath() =>
+      'file:mem_${_memSeq++}?mode=memory&cache=shared';
+
   /// 造一个 v9 结构的日记表(entry_date 带 UNIQUE),模拟旧版本库。
   Future<Database> openV9WithDiary() async {
     final db = await databaseFactory.openDatabase(
-      inMemoryDatabasePath,
+      uniqueMemPath(),
       options: OpenDatabaseOptions(version: 9),
     );
     await db.execute('''
@@ -82,7 +87,7 @@ void main() {
     /// 造一个"全新安装漏建列"的旧 notes 表:只有 id/content/created_at。
     Future<Database> openNotesMissingCols(int version) async {
       final db = await databaseFactory.openDatabase(
-        inMemoryDatabasePath,
+        uniqueMemPath(),
         options: OpenDatabaseOptions(version: version),
       );
       await db.execute('''
@@ -124,7 +129,7 @@ void main() {
 
     test('已含列的库再次迁移不报错(幂等)', () async {
       final db = await databaseFactory.openDatabase(
-        inMemoryDatabasePath,
+        uniqueMemPath(),
         options: OpenDatabaseOptions(version: 10),
       );
       await db.execute('''
@@ -180,7 +185,7 @@ void main() {
   group('DB 迁移 v12:闲话铺会话表', () {
     Future<Database> openV11() async {
       final db = await databaseFactory.openDatabase(
-        inMemoryDatabasePath,
+        uniqueMemPath(),
         options: OpenDatabaseOptions(version: 11),
       );
       await db.execute('''
@@ -235,14 +240,65 @@ void main() {
 
     test('已含会话表的库再次迁移不报错(幂等)', () async {
       final db = await openV11();
-      // 第一次:11 → 12 建表。
+      // 第一次:11 → 13 建表。
       await DbHelper.runMigrations(db, 11, DbHelper.dbVersion);
-      // 第二次:模拟数据库已到 12,再次调用不重复建表、不报错。
-      await DbHelper.runMigrations(db, 12, DbHelper.dbVersion);
+      // 第二次:模拟数据库已到当前版本,再次调用不重复建表、不报错。
+      await DbHelper.runMigrations(db, DbHelper.dbVersion, DbHelper.dbVersion);
       final tables = await db.rawQuery(
           "SELECT name FROM sqlite_master WHERE type='table'");
       final names = tables.map((r) => r['name'] as String).toSet();
       expect(names.containsAll({'chat_sessions', 'chat_messages'}), isTrue);
+      await db.close();
+    });
+  });
+
+  group('DB 迁移 v13:用户自传跟练视频表', () {
+    Future<Database> openV12() async {
+      final db = await databaseFactory.openDatabase(
+        uniqueMemPath(),
+        options: OpenDatabaseOptions(version: 12),
+      );
+      await db.execute('''
+        CREATE TABLE chat_sessions(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL DEFAULT '',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      ''');
+      return db;
+    }
+
+    test('迁移后创建 user_videos 并可读写删除', () async {
+      final db = await openV12();
+      await DbHelper.runMigrations(db, 12, DbHelper.dbVersion);
+
+      final id = await db.insert('user_videos', {
+        'title': '晨间拉伸',
+        'path': '/data/video.mp4',
+        'note': '10 分钟',
+        'created_at': 1000,
+      });
+      expect(id, greaterThan(0));
+
+      final rows = await db.query('user_videos', where: 'id = ?', whereArgs: [id]);
+      expect(rows.length, 1);
+      expect(rows.first['title'], '晨间拉伸');
+
+      await db.delete('user_videos', where: 'id = ?', whereArgs: [id]);
+      final after = await db.query('user_videos');
+      expect(after, isEmpty);
+      await db.close();
+    });
+
+    test('已含视频表的库再次迁移不报错(幂等)', () async {
+      final db = await openV12();
+      await DbHelper.runMigrations(db, 12, DbHelper.dbVersion);
+      await DbHelper.runMigrations(db, 13, DbHelper.dbVersion);
+      final tables = await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table'");
+      final names = tables.map((r) => r['name'] as String).toSet();
+      expect(names.contains('user_videos'), isTrue);
       await db.close();
     });
   });
