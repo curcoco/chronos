@@ -16,6 +16,7 @@ import 'package:student_workbench/core/utils/dates.dart';
 import 'package:student_workbench/core/widgets/frosted_snack.dart';
 import 'package:student_workbench/features/settings/pages/api_settings_page.dart';
 import 'package:student_workbench/features/memory/pages/memory_page.dart';
+import 'package:student_workbench/features/memory/services/memory_extractor.dart';
 
 /// 零时闲话铺:与 AI 聊天(中转站大模型),AI 回复可语音朗读(elevenlabs)。
 /// 会话按窗口长期保存(v12 起取消「零点万事清零」);[initialSessionId] 非空时
@@ -166,8 +167,10 @@ class _ChatPageState extends State<ChatPage> {
     await _appendMessage('user', text);
     _scrollToBottom();
     try {
-      // 注入长期记忆(画像/事实/摘要),让 AI 记住用户
-      final memory = await MemoryService.instance.promptSection();
+      // 注入长期记忆(RikkaHub 式相关条目):用最近的用户消息做关键词匹配,
+      // 只注入相关记忆,避免记忆多了上下文膨胀。
+      final query = _recentUserText();
+      final memory = await MemoryService.instance.promptSectionFor(query);
       final reply = await LlmService.instance.chat(
         history: _recentContext(),
         persona: _persona + memory,
@@ -181,10 +184,30 @@ class _ChatPageState extends State<ChatPage> {
       });
       await _appendMessage('assistant', reply);
       _scrollToBottom();
+      // 对话后自动提炼记忆(快速模型,后台执行,失败静默不影响聊天)。
+      await _autoExtract();
     } catch (e) {
       if (!mounted) return;
       setState(() => _sending = false);
       showFrostedSnack(context, 'AI 请求失败,请检查网络或配置');
+    }
+  }
+
+  /// 最近用户消息(用于记忆相关度匹配)
+  String _recentUserText() {
+    for (var i = _messages.length - 1; i >= 0; i--) {
+      if (_messages[i].role == 'user') return _messages[i].content;
+    }
+    return '';
+  }
+
+  /// 自动提炼:用最近对话更新长期记忆。失败静默(不打断聊天)。
+  Future<void> _autoExtract() async {
+    try {
+      await MemoryExtractor.instance
+          .extractFrom(_messages.sublist(0, _messages.length));
+    } catch (_) {
+      // 提炼失败不影响聊天,下次对话会再试。
     }
   }
 

@@ -71,7 +71,15 @@ class MemoryService {
     return rows.map(MemoryItem.fromMap).toList();
   }
 
-  /// 拼装注入到对话 system prompt 的「长期记忆」文本
+  /// 编辑一条记忆的内容
+  Future<void> update(int id, String content) async {
+    final db = await _db.database;
+    await db.update('memories',
+        {'content': content.trim(), 'updated_at': DateTime.now().millisecondsSinceEpoch},
+        where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// 拼装注入到对话 system prompt 的「长期记忆」文本(全量版,兼容旧调用)。
   Future<String> promptSection() async {
     final all = await list();
     if (all.isEmpty) return '';
@@ -96,6 +104,46 @@ class MemoryService {
       for (final m in summaries) {
         buf.write('- ${m.content}\n');
       }
+    }
+    return buf.toString();
+  }
+
+  /// 相关条目注入(RikkaHub 式):按 [query] 关键词匹配记忆,优先注入相关条目,
+  /// 而不是全量塞入。无相关时回退最近 N 条,保证记忆多时也不膨胀。
+  Future<String> promptSectionFor(String query) async {
+    final all = await list();
+    if (all.isEmpty) return '';
+    // 关键词:拆出中文/英文词(长度 ≥2 的片段),去掉常见停用词。
+    final q = query.toLowerCase();
+    final tokens = RegExp(r'[\u4e00-\u9fa5]{2,}|[a-z]{3,}')
+        .allMatches(q)
+        .map((m) => m.group(0)!)
+        .where((t) => !const {'今天', '明天', '昨天', '什么', '怎么', '可以'}.contains(t))
+        .toList();
+
+    int scoreOf(MemoryItem m) {
+      final c = m.content.toLowerCase();
+      var s = 0;
+      for (final t in tokens) {
+        if (c.contains(t)) s++;
+      }
+      return s;
+    }
+
+    // 按相关度排序,同分按更新时间新者优先。
+    final scored = all.map((m) => (item: m, score: scoreOf(m))).toList()
+      ..sort((a, b) {
+        if (a.score != b.score) return b.score.compareTo(a.score);
+        return b.item.updatedAt.compareTo(a.item.updatedAt);
+      });
+    // 相关条目(score>0)全取;无相关时取最近 5 条兜底。
+    final relevant = scored.where((e) => e.score > 0).map((e) => e.item).toList();
+    final picked = relevant.isNotEmpty ? relevant.take(10).toList() : scored.take(5).map((e) => e.item).toList();
+    if (picked.isEmpty) return '';
+
+    final buf = StringBuffer('\n\n【关于用户的长期记忆,回答时可参考】\n');
+    for (final m in picked) {
+      buf.write('- [${kindLabels[m.kind] ?? m.kind}] ${m.content}\n');
     }
     return buf.toString();
   }

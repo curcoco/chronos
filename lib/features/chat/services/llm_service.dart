@@ -24,17 +24,21 @@ class LlmService {
   ///
   /// [tools]: OpenAI 工具定义列表;模型需要时返回 tool_calls,
   /// [onTool] 负责执行工具并返回结果文本。
+  /// [model]: 指定模型名(如快速模型用于记忆提炼);为空时用配置的对话模型。
   Future<String> chat({
     required List<({String role, String content})> history,
     required String persona,
     List<Map<String, dynamic>>? tools,
     Future<String> Function(String name, Map<String, dynamic> args)? onTool,
+    String? model,
   }) async {
     final s = KeyStore.instance;
     final baseUrl = await s.get(KeyStore.llmBaseUrl);
     final apiKey = await s.get(KeyStore.llmApiKey);
-    final model = await s.get(KeyStore.llmModel);
-    if (baseUrl.isEmpty || apiKey.isEmpty || model.isEmpty) {
+    final modelName = (model == null || model.isEmpty)
+        ? await s.get(KeyStore.llmModel)
+        : model;
+    if (baseUrl.isEmpty || apiKey.isEmpty || modelName.isEmpty) {
       throw StateError('未配置中转站 API');
     }
     final base = baseUrl.replaceAll(RegExp(r'/$'), '');
@@ -54,7 +58,7 @@ class LlmService {
         req.headers
             .set(HttpHeaders.authorizationHeader, 'Bearer $apiKey');
         req.write(jsonEncode({
-          'model': model,
+          'model': modelName,
           'messages': messages,
           'temperature': 0.7,
           'max_tokens': 800,

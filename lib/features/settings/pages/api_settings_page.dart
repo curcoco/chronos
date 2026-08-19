@@ -26,7 +26,8 @@ class _ApiSettingsPageState extends State<ApiSettingsPage> {
   static const Map<String, String> _labels = {
     KeyStore.llmBaseUrl: '中转站地址',
     KeyStore.llmApiKey: '中转站 API Key',
-    KeyStore.llmModel: '模型名',
+    KeyStore.llmModel: '对话模型',
+    KeyStore.llmFastModel: '快速模型(记忆提炼)',
     KeyStore.elevenApiKey: 'elevenlabs API Key',
     KeyStore.elevenVoiceId: '语音 ID',
     KeyStore.weatherApiKey: '心知天气 Key',
@@ -38,6 +39,7 @@ class _ApiSettingsPageState extends State<ApiSettingsPage> {
     KeyStore.llmBaseUrl: 'https://…/v1',
     KeyStore.llmApiKey: 'sk-…',
     KeyStore.llmModel: '如 deepseek-chat / gpt-4o-mini',
+    KeyStore.llmFastModel: '如 deepseek-chat(留空则复用对话模型)',
     KeyStore.elevenApiKey: 'sk_…',
     KeyStore.elevenVoiceId: '如 BqljjWyTnrioXPCNkCd4',
     KeyStore.weatherApiKey: '心知天气私钥',

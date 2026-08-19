@@ -9,6 +9,7 @@ class KeyStore {
   static const String llmBaseUrl = 'llm_base_url';
   static const String llmApiKey = 'llm_api_key';
   static const String llmModel = 'llm_model';
+  static const String llmFastModel = 'llm_fast_model';
   static const String elevenApiKey = 'eleven_api_key';
   static const String elevenVoiceId = 'eleven_voice_id';
   static const String weatherApiKey = 'weather_api_key';
@@ -19,6 +20,7 @@ class KeyStore {
     llmBaseUrl,
     llmApiKey,
     llmModel,
+    llmFastModel,
     elevenApiKey,
     elevenVoiceId,
     weatherApiKey,

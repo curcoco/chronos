@@ -1,19 +1,18 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:student_workbench/features/memory/models/memory_item.dart';
-import 'package:student_workbench/features/chat/services/llm_service.dart';
-import 'package:student_workbench/features/memory/services/memory_service.dart';
-import 'package:student_workbench/features/chat/services/supabase_sync_service.dart';
 import 'package:student_workbench/core/theme.dart';
 import 'package:student_workbench/core/utils/dates.dart';
 import 'package:student_workbench/core/widgets/confirm_dialog.dart';
 import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/features/settings/pages/extension_service_page.dart';
+import 'package:student_workbench/features/chat/services/llm_service.dart';
+import 'package:student_workbench/features/memory/models/memory_item.dart';
+import 'package:student_workbench/features/memory/services/memory_extractor.dart';
+import 'package:student_workbench/features/memory/services/memory_service.dart';
+import 'package:student_workbench/features/chat/services/chat_service.dart';
 
-/// AI 长期记忆管理:查看 / 添加 / 删除 / 提炼 / 云端同步
+/// AI 长期记忆面板(RikkaHub 式内置记忆):
+/// 查看 / 添加 / 编辑 / 删除;聊天后自动提炼,也可手动提炼。
+/// 记忆全部存本地 SQLite;外置记忆服务见「系统设置 → API 配置」。
 class MemoryPage extends StatefulWidget {
   const MemoryPage({super.key});
 
@@ -27,9 +26,7 @@ class _MemoryPageState extends State<MemoryPage> {
   List<MemoryItem> _items = [];
   String _kind = 'all';
   bool _loading = true;
-  bool _cloudAuto = false;
-  // 云端记忆服务总开关(拓展服务页开启后才为 true;控制自动上传模块是否显示)
-  bool _cloudServiceEnabled = false;
+  bool _extracting = false;
 
   @override
   void initState() {
@@ -38,15 +35,9 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   Future<void> _init() async {
-    final prefs = await SharedPreferences.getInstance();
-    final auto = prefs.getBool('memory_cloud_auto') ?? false;
-    final serviceEnabled =
-        prefs.getBool(ExtensionServicePage.prefCloudMemoryEnabled) ?? false;
     final items = await _service.list();
     if (!mounted) return;
     setState(() {
-      _cloudAuto = auto;
-      _cloudServiceEnabled = serviceEnabled;
       _items = items;
       _loading = false;
     });
@@ -118,8 +109,37 @@ class _MemoryPageState extends State<MemoryPage> {
     }
     await _service.add(kind: kindCtrl.value, content: content);
     await _reload();
-    await _maybeSync();
     _showSnack('已保存记忆');
+  }
+
+  Future<void> _edit(MemoryItem item) async {
+    final ctrl = TextEditingController(text: item.content);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('编辑记忆'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLines: 3,
+          decoration: const InputDecoration(hintText: '记忆内容'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(ctrl.text.trim()),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    if (result == null || result.isEmpty || !mounted) return;
+    await _service.update(item.id!, result);
+    await _reload();
+    _showSnack('已更新');
   }
 
   Future<void> _delete(MemoryItem item) async {
@@ -136,114 +156,41 @@ class _MemoryPageState extends State<MemoryPage> {
     _showSnack('已删除');
   }
 
-  /// 从今天(或最近)的对话提炼记忆
+  /// 手动提炼:从最近对话提取记忆(与聊天后的自动提炼同一逻辑)。
   Future<void> _extract() async {
+    if (_extracting) return;
     if (!await LlmService.instance.isConfigured()) {
       _showSnack('聊天服务未配置,请先到 系统设置 → API 配置 填写');
       return;
     }
-    final prefs = await SharedPreferences.getInstance();
-    List<({String role, String content})> history = [];
-    if (prefs.getString('chat_date') == todayStr()) {
-      final raw = prefs.getString('chat_messages');
-      if (raw != null && raw.isNotEmpty) {
-        try {
-          final list = jsonDecode(raw) as List;
-          history = [
-            for (final m in list.cast<Map<String, dynamic>>())
-              (role: m['role'] as String, content: m['content'] as String),
-          ];
-        } catch (_) {}
-      }
-    }
-    if (history.isEmpty) {
-      _showSnack('今天还没有对话,先去聊几句吧');
+    final sessions = await ChatService.instance.sessions();
+    if (sessions.isEmpty) {
+      _showSnack('还没有对话,先去聊几句吧');
       return;
     }
+    // 取最近一个会话的全部消息。
+    final msgs = await ChatService.instance.messages(sessions.first.id!);
+    if (msgs.isEmpty) {
+      _showSnack('还没有对话,先去聊几句吧');
+      return;
+    }
+    final history = [
+      for (final m in msgs) (role: m.role, content: m.content),
+    ];
+    setState(() => _extracting = true);
     _showSnack('正在提炼记忆…');
-    final prompt = '你是记忆提炼助手。根据下面的对话,提炼用户的长期记忆:\n'
-        '1) profile:用户稳定身份/喜好/习惯(如有)\n'
-        '2) fact:明确提到的重要事实(如有)\n'
-        '3) summary:用一段话概括本次对话\n'
-        '只输出 JSON:{"profile":["..."],"facts":["..."],"summary":"..."},不要多余文字。\n\n'
-        '对话:\n${history.map((m) => '${m.role == 'user' ? '用户' : 'AI'}:${m.content}').join('\n')}';
     try {
-      final reply = await LlmService.instance.chat(
-        history: [(role: 'user', content: prompt)],
-        persona: '你是记忆提炼助手。',
-      );
-      final cleaned = reply
-          .replaceAll(RegExp(r'^```(json)?', multiLine: true), '')
-          .replaceAll('```', '')
-          .trim();
-      final data = jsonDecode(cleaned) as Map<String, dynamic>;
-      var added = 0;
-      // add() 内部去重:重复内容返回 0,只统计真正新增的条数。
-      for (final p in (data['profile'] as List? ?? []).cast<String>()) {
-        if (p.trim().isNotEmpty) {
-          final id =
-              await _service.add(kind: 'profile', content: p.trim(), source: 'chat');
-          if (id > 0) added++;
-        }
-      }
-      for (final f in (data['facts'] as List? ?? []).cast<String>()) {
-        if (f.trim().isNotEmpty) {
-          final id =
-              await _service.add(kind: 'fact', content: f.trim(), source: 'chat');
-          if (id > 0) added++;
-        }
-      }
-      final s = (data['summary'] as String?)?.trim();
-      if (s != null && s.isNotEmpty) {
-        final id = await _service.add(kind: 'summary', content: s, source: 'chat');
-        if (id > 0) added++;
-      }
+      final added =
+          await MemoryExtractor.instance.extractFrom(history);
       await _reload();
-      await _maybeSync();
       if (!mounted) return;
       _showSnack(added > 0 ? '已提炼 $added 条记忆' : '本次没有提炼到新记忆');
-    } catch (e) {
+    } catch (_) {
+      if (!mounted) return;
       _showSnack('提炼失败,请检查网络或配置');
+    } finally {
+      if (mounted) setState(() => _extracting = false);
     }
-  }
-
-  /// 云端同步:按用户开关决定是否自动上传
-  Future<void> _maybeSync() async {
-    if (!_cloudAuto) return;
-    await _syncNow(silent: true);
-  }
-
-  Future<void> _syncNow({bool silent = false}) async {
-    if (!await SupabaseSyncService.instance.isConfigured()) {
-      if (!silent) _showSnack('云端未配置,请先到 系统设置 → API 配置 填写 Supabase');
-      return;
-    }
-    final unsynced = await _service.unsynced();
-    if (unsynced.isEmpty) {
-      if (!silent) _showSnack('没有待同步的记忆');
-      return;
-    }
-    var ok = 0;
-    for (final m in unsynced) {
-      try {
-        await SupabaseSyncService.instance.push(m);
-        await _service.markSynced(m.id!);
-        ok++;
-      } catch (_) {
-        break; // 网络断开即停止
-      }
-    }
-    await _reload();
-    _showSnack(ok > 0 ? '已同步 $ok 条到云端' : '同步失败,请检查网络或配置');
-  }
-
-  Future<void> _toggleCloud(bool v) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('memory_cloud_auto', v);
-    if (!mounted) return;
-    setState(() => _cloudAuto = v);
-    if (v) await _syncNow(silent: true);
-    _showSnack(v ? '已开启自动上传云端' : '已关闭自动上传(记忆保留在本地)');
   }
 
   @override
@@ -254,8 +201,14 @@ class _MemoryPageState extends State<MemoryPage> {
         title: const Text('AI 长期记忆'),
         actions: [
           IconButton(
-            onPressed: _extract,
-            icon: const Icon(Icons.auto_awesome_rounded, size: 20),
+            onPressed: _extracting ? null : _extract,
+            icon: _extracting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.auto_awesome_rounded, size: 20),
             tooltip: '从对话提炼记忆',
           ),
         ],
@@ -265,50 +218,24 @@ class _MemoryPageState extends State<MemoryPage> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
               children: [
-                // 云同步说明与开关(仅在拓展服务页开启云端记忆服务后显示)
-                if (_cloudServiceEnabled) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.line),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.cloud_outlined,
-                                size: 18, color: AppColors.textSub),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text('自动上传云端(Supabase)',
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textMain)),
-                            ),
-                            Switch(
-                              value: _cloudAuto,
-                              activeThumbColor: AppColors.primary,
-                              onChanged: _toggleCloud,
-                            ),
-                          ],
-                        ),
-                        Text(
-                          '默认存本地。开启后新记忆自动同步到云端,可跨设备。'
-                          '未配置 Supabase 时同步会跳过。',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textSub,
-                              height: 1.5),
-                        ),
-                      ],
-                    ),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.line),
                   ),
-                  const SizedBox(height: 10),
-                ],
+                  child: Text(
+                    '记忆全部保存在本机(SQLite)。聊天后小掌柜会自动提炼'
+                    '画像 / 事实 / 摘要;也可手动添加或编辑。'
+                    '如需接外置记忆服务,见「系统设置 → API 配置 → 外置记忆」。',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSub,
+                        height: 1.5),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 Row(
                   children: [
                     Expanded(
@@ -323,17 +250,6 @@ class _MemoryPageState extends State<MemoryPage> {
                         label: const Text('添加记忆'),
                       ),
                     ),
-                    // 「同步到云端」仅在云端记忆服务开启后出现
-                    if (_cloudServiceEnabled) ...[
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _syncNow,
-                          icon: const Icon(Icons.cloud_upload_rounded, size: 18),
-                          label: const Text('同步到云端'),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -357,7 +273,7 @@ class _MemoryPageState extends State<MemoryPage> {
                   Padding(
                     padding: EdgeInsets.symmetric(vertical: 30),
                     child: Center(
-                      child: Text('还没有记忆。可手动添加,或聊天后点右上角提炼',
+                      child: Text('还没有记忆。可手动添加,或聊天后自动提炼',
                           style: TextStyle(color: AppColors.textSub)),
                     ),
                   )
@@ -397,35 +313,28 @@ class _MemoryPageState extends State<MemoryPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(m.content,
-                    style:
-                        const TextStyle(fontSize: 14, height: 1.5)),
+                    style: const TextStyle(fontSize: 14, height: 1.5)),
                 const SizedBox(height: 3),
-                Row(
-                  children: [
-                    if (m.cloudSynced) ...[
-                      const Icon(Icons.cloud_done_rounded,
-                          size: 12, color: Color(0xFF2E9E5B)),
-                      const SizedBox(width: 4),
-                      const Text('已同步',
-                          style: TextStyle(
-                              fontSize: 10, color: Color(0xFF2E9E5B))),
-                    ],
-                    const SizedBox(width: 6),
-                    Text(
-                      fullDateTimeLabel(m.createdAt),
-                      style: TextStyle(
-                          fontSize: 10, color: AppColors.textSub),
-                    ),
-                  ],
+                Text(
+                  fullDateTimeLabel(m.createdAt),
+                  style: TextStyle(fontSize: 10, color: AppColors.textSub),
                 ),
               ],
             ),
+          ),
+          IconButton(
+            onPressed: () => _edit(m),
+            icon: Icon(Icons.edit_outlined,
+                size: 16, color: AppColors.textSub),
+            visualDensity: VisualDensity.compact,
+            tooltip: '编辑',
           ),
           IconButton(
             onPressed: () => _delete(m),
             icon: Icon(Icons.close_rounded,
                 size: 18, color: AppColors.textSub),
             visualDensity: VisualDensity.compact,
+            tooltip: '删除',
           ),
         ],
       ),
