@@ -8,16 +8,13 @@ import 'package:student_workbench/features/chat/services/chat_service.dart';
 import 'package:student_workbench/features/chat/services/eleven_service.dart';
 import 'package:student_workbench/features/chat/services/llm_service.dart';
 import 'package:student_workbench/features/chat/services/nocturne_service.dart';
+import 'package:student_workbench/features/chat/tools/tool_registry.dart';
 import 'package:student_workbench/features/memory/services/memory_service.dart';
-import 'package:student_workbench/features/notes/services/note_service.dart';
-import 'package:student_workbench/features/tasks/services/task_service.dart';
-import 'package:student_workbench/core/services/weather_service.dart';
+import 'package:student_workbench/features/memory/services/memory_extractor.dart';
 import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
 import 'package:student_workbench/core/widgets/frosted_snack.dart';
 import 'package:student_workbench/features/settings/pages/api_settings_page.dart';
 import 'package:student_workbench/features/memory/pages/memory_page.dart';
-import 'package:student_workbench/features/memory/services/memory_extractor.dart';
 
 /// 零时闲话铺:与 AI 聊天(中转站大模型),AI 回复可语音朗读(elevenlabs)。
 /// 会话按窗口长期保存(v12 起取消「零点万事清零」);[initialSessionId] 非空时
@@ -36,42 +33,8 @@ class _ChatPageState extends State<ChatPage> {
 
   final ChatService _chatService = ChatService.instance;
 
-  /// 本地工具(函数调用):模型可查询天气 / 今日任务 / 灵感记录
-  static const List<Map<String, dynamic>> _tools = [
-    {
-      'type': 'function',
-      'function': {
-        'name': 'get_weather',
-        'description': '查询指定城市的当前天气',
-        'parameters': {
-          'type': 'object',
-          'properties': {
-            'city': {
-              'type': 'string',
-              'description': '城市拼音,如 beijing / hangzhou',
-            },
-          },
-          'required': ['city'],
-        },
-      },
-    },
-    {
-      'type': 'function',
-      'function': {
-        'name': 'get_today_tasks',
-        'description': '查询今天的学习任务列表',
-        'parameters': {'type': 'object', 'properties': {}},
-      },
-    },
-    {
-      'type': 'function',
-      'function': {
-        'name': 'get_notes',
-        'description': '查询最近的灵感速记记录',
-        'parameters': {'type': 'object', 'properties': {}},
-      },
-    },
-  ];
+  /// 工具由注册表统一管理(见 tool_registry.dart):只读工具 + 需确认的写工具。
+  List<Map<String, dynamic>> get _tools => ToolRegistry.definitions();
 
   final TextEditingController _ctrl = TextEditingController();
   final ScrollController _scroll = ScrollController();
@@ -231,34 +194,56 @@ class _ChatPageState extends State<ChatPage> {
     return _messages.sublist(_messages.length - _maxContextMessages);
   }
 
-  /// 本地工具执行:模型调用工具时在这里查询本地数据,返回文本结果
+  /// 本地工具执行:模型调用工具时在这里查询本地数据,返回文本结果。
+  /// 写操作(记账/加任务/完成任务)先弹用户确认,确认后才真正执行。
   Future<String> _execTool(String name, Map<String, dynamic> args) async {
+    // 写操作:先向用户确认。
+    if (ToolRegistry.needsConfirm(name)) {
+      final desc = _describeToolCall(name, args);
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('小掌柜想帮你执行操作'),
+          content: Text(
+            '$desc\n\n是否允许?',
+            style: const TextStyle(height: 1.6),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('不允许'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('允许'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true) {
+        return ToolRegistry.execute(name, args, confirmed: true);
+      }
+      return '用户拒绝了该操作,不要执行,并向用户确认是否需要调整。';
+    }
+    return ToolRegistry.execute(name, args);
+  }
+
+  /// 生成工具调用的可读描述(用于确认弹窗)。
+  String _describeToolCall(String name, Map<String, dynamic> args) {
     switch (name) {
-      case 'get_weather':
-        final city = (args['city'] as String?)?.trim() ?? '';
-        if (city.isEmpty) return '缺少城市参数';
-        if (!await WeatherService.instance.isConfigured()) {
-          return '天气服务未配置(API 配置页未填心知天气 Key)';
-        }
-        try {
-          final w = await WeatherService.instance.fetchCity(city);
-          return '${w.city} 当前 ${w.text},${w.temp}℃';
-        } catch (e) {
-          return '天气查询失败:$e';
-        }
-      case 'get_today_tasks':
-        final tasks = await TaskService().todayTasks(todayStr());
-        if (tasks.isEmpty) return '今天没有任务';
-        return tasks
-            .map((t) =>
-                '${t.done ? "[已完成]" : "[待完成]"} ${t.title}(${t.category})')
-            .join('\n');
-      case 'get_notes':
-        final notes = await NoteService().notes();
-        if (notes.isEmpty) return '还没有灵感记录';
-        return notes.take(5).map((n) => n.content).join('\n');
+      case 'add_ledger':
+        final type = (args['type'] as String?) ?? 'expense';
+        final amount = (args['amount'] as num?)?.toDouble() ?? 0;
+        final category = (args['category'] as String?) ?? '其他';
+        final note = (args['note'] as String?)?.trim() ?? '';
+        return '记一笔${type == 'income' ? '收入' : '支出'} ¥${amount.toStringAsFixed(2)}'
+            '($category)${note.isEmpty ? '' : ' $note'}';
+      case 'add_task':
+        return '添加任务「${args['title']}」';
+      case 'complete_task':
+        return '完成任务「${args['title']}」';
       default:
-        return '未知工具:$name';
+        return '执行「$name」';
     }
   }
 

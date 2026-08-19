@@ -5,6 +5,7 @@ import 'package:student_workbench/features/tasks/services/task_service.dart';
 import 'package:student_workbench/features/tasks/models/student_task.dart';
 import 'package:student_workbench/core/data/daily_content.dart';
 import 'package:student_workbench/core/utils/dates.dart';
+import 'package:student_workbench/features/chat/tools/tool_registry.dart';
 
 void main() {
   group('AppInfo.compareVersions 版本比较', () {
@@ -214,6 +215,51 @@ void main() {
       final f2 = save();
       await Future.wait([f1, f2]);
       expect(saves, 1);
+    });
+  });
+
+  group('ToolRegistry 工具注册表', () {
+    test('定义结构合法(名称/描述/参数齐全)', () {
+      for (final def in ToolRegistry.definitions()) {
+        final fn = def['function'] as Map<String, dynamic>;
+        expect(fn['name'], isNotEmpty, reason: '每个工具必须有名称');
+        expect(fn['description'], isNotEmpty, reason: '每个工具必须有描述');
+        final params = fn['parameters'] as Map<String, dynamic>;
+        expect(params['type'], 'object');
+        expect(params['properties'], isA<Map>());
+      }
+    });
+
+    test('读工具不需要确认,写工具需要确认', () {
+      expect(ToolRegistry.needsConfirm('get_weather'), isFalse);
+      expect(ToolRegistry.needsConfirm('get_today_tasks'), isFalse);
+      expect(ToolRegistry.needsConfirm('get_balance'), isFalse);
+      expect(ToolRegistry.needsConfirm('get_wishes'), isFalse);
+      expect(ToolRegistry.needsConfirm('add_ledger'), isTrue);
+      expect(ToolRegistry.needsConfirm('add_task'), isTrue);
+      expect(ToolRegistry.needsConfirm('complete_task'), isTrue);
+    });
+
+    test('速记/日记数据没有对应工具(小掌柜无权限访问)', () {
+      final names = ToolRegistry.definitions()
+          .map((d) => (d['function'] as Map)['name'] as String)
+          .toSet();
+      expect(names.contains('get_notes'), isTrue); // 速记仅可读
+      expect(names.any((n) => n.contains('diary')), isFalse); // 日记无任何工具
+      expect(names.any((n) => n.contains('delete')), isFalse); // 无删除类工具
+    });
+
+    test('未知工具返回错误文本', () async {
+      final r = await ToolRegistry.execute('not_exist', {});
+      expect(r, '未知工具:not_exist');
+    });
+
+    test('写工具未确认时执行返回待确认提示', () async {
+      final r = await ToolRegistry.execute(
+        'add_task',
+        {'title': '写作业'},
+      );
+      expect(r, contains('用户需确认'));
     });
   });
 }
