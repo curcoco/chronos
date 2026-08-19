@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:student_workbench/features/shell/pages/splash_page.dart';
+import 'package:student_workbench/core/services/app_log.dart';
 import 'package:student_workbench/core/services/settings_service.dart';
 import 'package:student_workbench/core/theme.dart';
 
@@ -10,6 +11,8 @@ Future<void> main() async {
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   // 启动前载入主题模式,避免首帧闪烁。
   await SettingsService.instance.loadThemeMode();
+  AppLog.instance.init();
+  AppLog.instance.i('App 启动,主题模式 ${SettingsService.instance.themeMode.value}');
   runApp(const StudentWorkbenchApp());
 }
 

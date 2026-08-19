@@ -9,6 +9,7 @@ import 'package:student_workbench/features/notes/services/note_service.dart';
 import 'package:student_workbench/core/services/settings_service.dart';
 import 'package:student_workbench/features/tasks/services/task_service.dart';
 import 'package:student_workbench/core/services/weather_service.dart';
+import 'package:student_workbench/core/services/app_log.dart';
 import 'package:student_workbench/core/theme.dart';
 import 'package:student_workbench/core/utils/dates.dart';
 import 'package:student_workbench/core/widgets/frosted_snack.dart';
@@ -179,6 +180,7 @@ class _HomePageState extends State<HomePage> {
       await _reload();
       _showSnack('已同步到灵感专区');
     } catch (e) {
+      AppLog.instance.e('首页速记保存失败:$e');
       _showSnack('保存失败:$e');
     } finally {
       if (mounted) setState(() => _savingNote = false);

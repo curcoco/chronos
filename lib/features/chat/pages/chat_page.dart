@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:student_workbench/core/config/api_config.dart';
 import 'package:student_workbench/routes.dart';
+import 'package:student_workbench/core/services/app_log.dart';
 import 'package:student_workbench/features/chat/pages/session_list_page.dart';
 import 'package:student_workbench/features/chat/services/chat_service.dart';
 import 'package:student_workbench/features/chat/services/eleven_service.dart';
@@ -159,6 +160,7 @@ class _ChatPageState extends State<ChatPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _sending = false);
+      AppLog.instance.e('聊天请求失败:$e');
       showFrostedSnack(context, 'AI 请求失败,请检查网络或配置');
     }
   }
@@ -182,9 +184,10 @@ class _ChatPageState extends State<ChatPage> {
         for (final item in result.addedItems) {
           await NocturneService.instance.hold(item);
         }
+        AppLog.instance.i('自动提炼新增 ${result.added} 条记忆');
       }
-    } catch (_) {
-      // 提炼失败不影响聊天,下次对话会再试。
+    } catch (e) {
+      AppLog.instance.e('自动提炼失败:$e');
     }
   }
 
@@ -221,8 +224,11 @@ class _ChatPageState extends State<ChatPage> {
         ),
       );
       if (confirmed == true) {
-        return ToolRegistry.execute(name, args, confirmed: true);
+        final r = await ToolRegistry.execute(name, args, confirmed: true);
+        AppLog.instance.i('小掌柜执行写操作:$desc → $r');
+        return r;
       }
+      AppLog.instance.i('用户拒绝了小掌柜的写操作:$desc');
       return '用户拒绝了该操作,不要执行,并向用户确认是否需要调整。';
     }
     return ToolRegistry.execute(name, args);

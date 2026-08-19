@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
+import 'package:student_workbench/core/services/app_log.dart';
 import 'package:student_workbench/core/services/db_helper.dart';
 
 /// 恢复结果:是否成功导入数据库、设置项条数。
@@ -54,6 +55,14 @@ class BackupService {
     });
     final metaBytes = utf8.encode(meta);
     archive.addFile(ArchiveFile('backup-info.json', metaBytes.length, metaBytes));
+
+    // 4) 应用日志(便于问题复现);无内容则跳过。
+    final logText = await AppLog.instance.exportText();
+    if (logText.isNotEmpty) {
+      final logBytes = utf8.encode(logText);
+      archive.addFile(
+          ArchiveFile('app_log.txt', logBytes.length, logBytes));
+    }
 
     // 打包
     final encoded = ZipEncoder().encode(archive)!;

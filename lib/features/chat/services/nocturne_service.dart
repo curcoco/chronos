@@ -1,5 +1,6 @@
 import 'package:mcp_client/mcp_client.dart';
 
+import 'package:student_workbench/core/services/app_log.dart';
 import 'package:student_workbench/core/services/key_store.dart';
 
 /// 外置记忆服务(用户自配,应用只提供接口)。
@@ -31,8 +32,9 @@ class NocturneService {
   /// 建立一次短连接并执行 [action],用完即断。
   /// 任何异常(未配置/网络/服务端)都返回 null,由调用方静默降级。
   Future<T?> _withClient<T>(
-    Future<T> Function(Client client) action,
-  ) async {
+    Future<T> Function(Client client) action, {
+    String? what,
+  }) async {
     if (!await isConfigured()) return null;
     final url = await configuredUrl();
     final token = await configuredToken();
@@ -60,9 +62,13 @@ class NocturneService {
             client.disconnect();
           }
         },
-        (error) => null,
+        (error) {
+          AppLog.instance.e('外置记忆连接失败($what):$error');
+          return null;
+        },
       );
-    } catch (_) {
+    } catch (e) {
+      AppLog.instance.e('外置记忆调用异常($what):$e');
       return null;
     }
   }
@@ -70,35 +76,43 @@ class NocturneService {
   /// 写入记忆(Nocturne 的 hold 工具)。
   /// [content] 记忆内容;成功返回 true;未配置/失败返回 false。
   Future<bool> hold(String content) async {
-    final ok = await _withClient<bool>((client) async {
-      final res = await client.callTool('hold', {'content': content});
-      return res.isError == false;
-    });
+    final ok = await _withClient<bool>(
+      (client) async {
+        final res = await client.callTool('hold', {'content': content});
+        return res.isError == false;
+      },
+      what: 'hold',
+    );
     return ok ?? false;
   }
 
   /// 检索记忆(Nocturne 的 breath 工具)。
   /// [query] 检索词;成功返回工具结果文本;未配置/失败返回 null。
   Future<String?> breath(String query) async {
-    return _withClient<String>((client) async {
-      final res = await client.callTool('breath', {'query': query});
-      final parts = res.content
-          .map((c) => switch (c) {
-                TextContent(:final text) => text,
-                _ => '',
-              })
-          .where((t) => t.isNotEmpty);
-      final text = parts.join('\n');
-      return text;
-    });
+    return _withClient<String>(
+      (client) async {
+        final res = await client.callTool('breath', {'query': query});
+        final parts = res.content
+            .map((c) => switch (c) {
+                  TextContent(:final text) => text,
+                  _ => '',
+                })
+            .where((t) => t.isNotEmpty);
+        return parts.join('\n');
+      },
+      what: 'breath',
+    );
   }
 
   /// 外置记忆是否可用(配置 + 连通性探测)。失败不抛异常。
   Future<bool> probe() async {
-    return await _withClient<bool>((client) async {
-      await client.listTools();
-      return true;
-    }) ??
+    return await _withClient<bool>(
+          (client) async {
+            await client.listTools();
+            return true;
+          },
+          what: 'probe',
+        ) ??
         false;
   }
 }

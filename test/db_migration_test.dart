@@ -15,9 +15,8 @@ void main() {
   });
 
   /// 每个测试用独立的内存库路径,避免跨测试共享(表残留/重复建表)。
-  var _memSeq = 0;
-  String uniqueMemPath() =>
-      'file:mem_${_memSeq++}?mode=memory&cache=shared';
+  var memSeq = 0;
+  String uniqueMemPath() => 'file:mem_${memSeq++}?mode=memory&cache=shared';
 
   /// 造一个 v9 结构的日记表(entry_date 带 UNIQUE),模拟旧版本库。
   Future<Database> openV9WithDiary() async {
