@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chronos/features/chat/services/llm_service.dart';
+import 'package:chronos/features/chat/services/llm_usage.dart';
 
 void main() {
   test('LlmUsage.fromJson:解析标准 OpenAI usage(含缓存命中)', () {

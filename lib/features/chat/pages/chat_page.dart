@@ -24,6 +24,8 @@ import 'package:chronos/core/widgets/frosted_snack.dart';
 import 'package:chronos/core/widgets/status_views.dart';
 import 'package:chronos/features/chat/models/chat_session.dart';
 import 'package:chronos/features/chat/pages/session_list_page.dart';
+import 'package:chronos/features/chat/services/llm_usage.dart';
+import 'package:chronos/features/chat/widgets/chat_token_bar.dart';
 import 'package:chronos/features/chat/pages/shopkeeper_settings_page.dart';
 import 'package:chronos/features/chat/services/chat_service.dart';
 import 'package:chronos/features/chat/services/eleven_service.dart';
@@ -835,59 +837,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
-  /// Token 仪表盘:最近一次请求用量 + 缓存命中 + 本会话累计。
+  /// Token 仪表盘条:纯展示,数据由状态传入(见 widgets/chat_token_bar.dart)。
   /// 未产生任何用量且未在生成时不显示,保持聊天页干净。
-  Widget _tokenBar() {
-    if (!_sending && _lastUsage == null) return const SizedBox.shrink();
-    final Color sub = AppColors.textSub;
-    if (_sending) {
-      return _tokenStrip([
-        Text('生成中…', style: TextStyle(fontSize: 11, color: sub)),
-      ]);
-    }
-    final u = _lastUsage!;
-    final cachePct = u.promptTokens > 0
-        ? ((u.cachedTokens / u.promptTokens) * 100).round()
-        : 0;
-    final session = _sessionPromptTokens + _sessionCompletionTokens;
-    return _tokenStrip([
-      Text(
-        '${u.promptTokens}+${u.completionTokens}=${u.totalTokens}',
-        style: TextStyle(fontSize: 11, color: sub),
-      ),
-      if (u.cachedTokens > 0) ...[
-        const SizedBox(width: 8),
-        Icon(Icons.bolt_rounded, size: 12, color: const Color(0xFF43A047)),
-        Text('缓存命中 ${u.cachedTokens}($cachePct%)',
-            style: TextStyle(
-                fontSize: 11,
-                color: const Color(0xFF43A047),
-                fontWeight: FontWeight.w600)),
-      ],
-      const Spacer(),
-      Text(
-        _sessionCachedTokens > 0
-            ? '本会话 $session tokens · 缓存 $_sessionCachedTokens'
-            : '本会话 $session tokens',
-        style: TextStyle(fontSize: 11, color: sub),
-      ),
-    ]);
-  }
-
-  Widget _tokenStrip(List<Widget> children) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-      color: AppColors.card.withValues(alpha: 0.6),
-      child: Row(
-        children: [
-          Icon(Icons.data_usage_rounded, size: 13, color: AppColors.textSub),
-          const SizedBox(width: 6),
-          ...children,
-        ],
-      ),
-    );
-  }
+  Widget _tokenBar() => ChatTokenBar(
+        sending: _sending,
+        usage: _lastUsage,
+        sessionPromptTokens: _sessionPromptTokens,
+        sessionCompletionTokens: _sessionCompletionTokens,
+        sessionCachedTokens: _sessionCachedTokens,
+      );
 
   /// 本地工具执行:模型调用工具时在这里查询本地数据,返回文本结果。
   /// 写操作(记账/加任务/完成任务)先弹用户确认,确认后才真正执行。
