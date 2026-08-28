@@ -22,6 +22,7 @@ import 'package:chronos/core/utils/context_budget.dart';
 import 'package:chronos/core/widgets/app_text_field.dart';
 import 'package:chronos/core/widgets/frosted_snack.dart';
 import 'package:chronos/core/widgets/status_views.dart';
+import 'package:chronos/features/chat/models/chat_session.dart';
 import 'package:chronos/features/chat/pages/session_list_page.dart';
 import 'package:chronos/features/chat/pages/shopkeeper_settings_page.dart';
 import 'package:chronos/features/chat/services/chat_service.dart';
@@ -975,11 +976,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         '${t.minute.toString().padLeft(2, '0')}';
   }
 
-  /// 长按消息:弹出操作菜单(复制 / 翻译;最后一条 AI 回复额外支持重新生成)。
+  /// 长按消息:弹出操作菜单(复制 / 翻译 / 复制图片 / 从此分支 / 最后一条 AI 可重新生成)。
   Future<void> _showMessageActions(int index) async {
     final m = _messages[index];
     final text = m.content.trim();
-    if (text.isEmpty) return;
+    // 空内容且无图片(生成中的空气泡)不弹菜单。
+    if (text.isEmpty && m.imagePath == null) return;
     final isLastAssistant =
         index == _messages.length - 1 && m.role == 'assistant';
     final action = await showModalBottomSheet<String>(
@@ -992,22 +994,35 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.copy_rounded, size: 20),
-              title: const Text('复制'),
-              onTap: () => Navigator.of(context).pop('copy'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.translate_rounded, size: 20),
-              title: const Text('翻译'),
-              onTap: () => Navigator.of(context).pop('translate'),
-            ),
+            if (text.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.copy_rounded, size: 20),
+                title: const Text('复制'),
+                onTap: () => Navigator.of(context).pop('copy'),
+              ),
+            if (text.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.translate_rounded, size: 20),
+                title: const Text('翻译'),
+                onTap: () => Navigator.of(context).pop('translate'),
+              ),
+            if (m.imagePath != null)
+              ListTile(
+                leading: const Icon(Icons.download_rounded, size: 20),
+                title: const Text('保存图片到相册'),
+                onTap: () => Navigator.of(context).pop('saveImage'),
+              ),
             if (isLastAssistant)
               ListTile(
                 leading: const Icon(Icons.refresh_rounded, size: 20),
                 title: const Text('重新生成'),
                 onTap: () => Navigator.of(context).pop('regenerate'),
               ),
+            ListTile(
+              leading: const Icon(Icons.call_split_rounded, size: 20),
+              title: const Text('从此消息分支新会话'),
+              onTap: () => Navigator.of(context).pop('branch'),
+            ),
             const SizedBox(height: 8),
           ],
         ),
@@ -1019,8 +1034,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         await _copyMessage(text);
       case 'translate':
         await _translateMessage(text);
+      case 'saveImage':
+        await _saveImageToGallery(m.imagePath!);
       case 'regenerate':
         await _regenerate();
+      case 'branch':
+        await _branchAt(index);
     }
   }
 
@@ -1028,6 +1047,60 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
     showFrostedSnack(context, '已复制');
+  }
+
+  /// 从此消息分支新会话:用「本条及之前」的消息建立一个新会话并切换过去,
+  /// 原始会话保持不变(可回退)。
+  Future<void> _branchAt(int index) async {
+    final sid = _sessionId;
+    if (sid == null || _sending || index < 0) return;
+    try {
+      final msgs = await _chatService.messages(sid);
+      if (index >= msgs.length) {
+        if (!mounted) return;
+        showFrostedSnack(context, '分支失败,请重试');
+        return;
+      }
+      final slice = msgs.sublist(0, index + 1);
+      final newSid =
+          await _chatService.branchSession(msgs: slice, title: _branchTitle(slice));
+      if (newSid < 0 || !mounted) return;
+      setState(() {
+        _sessionId = newSid;
+        _messages = [
+          for (final m in slice)
+            (role: m.role,
+                content: m.content,
+                imagePath: m.imagePath,
+                createdAt: m.createdAt,
+                thinking: m.reasoningContent),
+        ];
+        _compressedUpTo = 0;
+        _compressedSummary = null;
+        _contextWarned = false;
+        _lastUsage = null;
+        _sessionPromptTokens = 0;
+        _sessionCompletionTokens = 0;
+        _sessionCachedTokens = 0;
+      });
+      _scrollToBottom();
+      if (!mounted) return;
+      showFrostedSnack(context, '已分支到新会话,原会话保留');
+    } catch (e) {
+      AppLog.instance.e('分支会话失败:$e');
+      if (!mounted) return;
+      showFrostedSnack(context, '分支失败,请重试');
+    }
+  }
+
+  /// 分支会话标题:取分支点消息截断(grapheme 安全),前缀「分支:」。
+  String _branchTitle(List<ChatMessage> slice) {
+    final last =
+        slice.last.content.trim().replaceAll('\n', ' ');
+    if (last.isEmpty) return '分支';
+    final chars = last.characters;
+    final t = chars.length <= 12 ? last : '${chars.take(12)}…';
+    return '分支:$t';
   }
 
   /// 翻译消息:调聊天模型翻译(内容为中文则译成英文,否则译成简体中文),
@@ -1643,11 +1716,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               ),
             )
           else if (thinking)
-            // 生成中且尚无文本:显示等待提示
-            Text(
-              '掌柜正在想…',
-              style: TextStyle(fontSize: 12, color: AppColors.textSub),
-            ),
+            // 生成中且尚无文本:显示打字等待提示(省略号动画)。
+            const _TypingIndicator(),
           // 时间戳:生成中的空气泡不显示;今天的消息不显示,跨天显示日期。
           if (!thinking && createdAt != null) ...[
             if (_timeLabel(createdAt) case final String label) ...[
@@ -1799,6 +1869,54 @@ class _ThinkingBlockState extends State<_ThinkingBlock> {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// 「掌柜正在想…」打字省略号动画(生成中显示,无内容时)。
+class _TypingIndicator extends StatefulWidget {
+  const _TypingIndicator();
+
+  @override
+  State<_TypingIndicator> createState() => _TypingIndicatorState();
+}
+
+class _TypingIndicatorState extends State<_TypingIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        final t = _c.value;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('掌柜正在想',
+                style: TextStyle(fontSize: 12, color: AppColors.textSub)),
+            for (var i = 0; i < 3; i++) ...[
+              const SizedBox(width: 2),
+              Opacity(
+                opacity: (t * 3 - i).clamp(0.0, 1.0),
+                child: Text('…',
+                    style:
+                        TextStyle(fontSize: 12, color: AppColors.textSub)),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }

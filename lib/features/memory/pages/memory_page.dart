@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:chronos/core/theme.dart';
 import 'package:chronos/core/services/app_log.dart';
@@ -27,9 +28,12 @@ class _MemoryPageState extends State<MemoryPage> {
 
   List<MemoryItem> _items = [];
   String _kind = 'all';
+  String? _tagFilter; // 标签筛选(null = 全部)
   bool _loading = true;
   String? _loadError; // 记忆列表加载失败(渲染 ErrorView + 重试)
   bool _extracting = false;
+  bool _selecting = false; // 批量管理模式
+  final Set<int> _selected = {}; // 批量管理选中的 id
 
   @override
   void initState() {
@@ -71,8 +75,19 @@ class _MemoryPageState extends State<MemoryPage> {
     showFrostedSnack(context, msg);
   }
 
-  List<MemoryItem> get _display =>
-      _kind == 'all' ? _items : _items.where((m) => m.kind == _kind).toList();
+  List<MemoryItem> get _display {
+    var list = _kind == 'all'
+        ? _items
+        : _items.where((m) => m.kind == _kind).toList();
+    if (_tagFilter != null) {
+      list = list.where((m) => m.tags.contains(_tagFilter)).toList();
+    }
+    return list;
+  }
+
+  /// 所有记忆里出现过的标签(去重,用于筛选;无标签时整行隐藏)。
+  List<String> get _allTags =>
+      _items.expand((m) => m.tags).map((t) => t.trim()).toSet().toList();
 
   Future<void> _add() => _showEditor();
 
@@ -310,10 +325,10 @@ class _MemoryPageState extends State<MemoryPage> {
     final display = _display;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI 长期记忆'),
+        title: Text(_selecting ? '管理记忆' : 'AI 长期记忆'),
         actions: [
           IconButton(
-            onPressed: _extracting ? null : _extract,
+            onPressed: _extracting || _selecting ? null : _extract,
             icon: _extracting
                 ? const SizedBox(
                     width: 18,
@@ -323,8 +338,19 @@ class _MemoryPageState extends State<MemoryPage> {
                 : const Icon(Icons.auto_awesome_rounded, size: 20),
             tooltip: '从对话提炼记忆',
           ),
+          IconButton(
+            onPressed: () => setState(() {
+              _selecting = !_selecting;
+              if (!_selecting) _selected.clear();
+            }),
+            icon: Icon(
+                _selecting ? Icons.check_rounded : Icons.checklist_rounded,
+                size: 20),
+            tooltip: _selecting ? '完成管理' : '批量管理',
+          ),
         ],
       ),
+      bottomNavigationBar: _selecting ? _selectionBar() : null,
       body: _loadError != null
           ? ErrorView(
               message: _loadError!,
@@ -391,6 +417,23 @@ class _MemoryPageState extends State<MemoryPage> {
                       ),
                   ],
                 ),
+                if (_allTags.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  // 标签筛选(可选)
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final t in _allTags)
+                        ChoiceChip(
+                          label: Text(t, style: const TextStyle(fontSize: 12)),
+                          selected: _tagFilter == t,
+                          onSelected: (sel) => setState(() {
+                            _tagFilter = sel ? t : null;
+                          }),
+                        ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 8),
                 if (display.isEmpty)
                   Padding(
@@ -408,79 +451,191 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   Widget _memoryTile(MemoryItem m) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.line)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: _kindColor(m.kind).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              MemoryService.kindLabels[m.kind] ?? m.kind,
-              style: TextStyle(
-                  fontSize: 11,
-                  color: _kindColor(m.kind),
-                  fontWeight: FontWeight.w600),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(m.content,
-                    style: const TextStyle(fontSize: 14, height: 1.5)),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    // 重要性(1~10)
-                    _stars(m.importance),
-                    if (m.source == 'auto') ...[
-                      _metaBadge('AI 档案', const Color(0xFF1565C0)),
-                    ],
-                    if (m.pinned) ...[
-                      _metaBadge('置顶', AppColors.primaryDark),
-                    ],
-                    if (m.visibility == 'private') ...[
-                      _metaBadge('私有', const Color(0xFF8E24AA)),
-                    ],
-                    if (m.tags.isNotEmpty) ...[
-                      for (final t in m.tags.take(2))
-                        _metaBadge(t, AppColors.textSub),
-                    ],
-                  ],
+    final selected = _selected.contains(m.id);
+    return InkWell(
+      onTap: _selecting
+          ? () => _toggleSelect(m.id)
+          : null,
+      onLongPress: _selecting ? null : () => _copyMemory(m.content),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppColors.line)),
+          color: selected
+              ? AppColors.primaryLight.withValues(alpha: 0.30)
+              : null,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_selecting) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 4, right: 6),
+                child: Icon(
+                  selected
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  size: 20,
+                  color: selected ? AppColors.primaryDark : AppColors.line,
                 ),
-                Text(
-                  fullDateTimeLabel(m.createdAt),
-                  style: TextStyle(fontSize: 10, color: AppColors.textSub),
-                ),
-              ],
+              ),
+            ],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: _kindColor(m.kind).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                MemoryService.kindLabels[m.kind] ?? m.kind,
+                style: TextStyle(
+                    fontSize: 11,
+                    color: _kindColor(m.kind),
+                    fontWeight: FontWeight.w600),
+              ),
             ),
-          ),
-          IconButton(
-            onPressed: () => _edit(m),
-            icon: Icon(Icons.edit_outlined,
-                size: 16, color: AppColors.textSub),
-            visualDensity: VisualDensity.compact,
-            tooltip: '编辑',
-          ),
-          IconButton(
-            onPressed: () => _delete(m),
-            icon: Icon(Icons.close_rounded,
-                size: 18, color: AppColors.textSub),
-            visualDensity: VisualDensity.compact,
-            tooltip: '删除',
-          ),
-        ],
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(m.content,
+                      style: const TextStyle(fontSize: 14, height: 1.5)),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      // 重要性(1~10)
+                      _stars(m.importance),
+                      if (m.source == 'auto') ...[
+                        _metaBadge('AI 档案', const Color(0xFF1565C0)),
+                      ],
+                      if (m.pinned) ...[
+                        _metaBadge('置顶', AppColors.primaryDark),
+                      ],
+                      if (m.visibility == 'private') ...[
+                        _metaBadge('私有', const Color(0xFF8E24AA)),
+                      ],
+                      if (m.tags.isNotEmpty) ...[
+                        for (final t in m.tags.take(2))
+                          _metaBadge(t, AppColors.textSub),
+                      ],
+                    ],
+                  ),
+                  Text(
+                    fullDateTimeLabel(m.createdAt),
+                    style: TextStyle(fontSize: 10, color: AppColors.textSub),
+                  ),
+                ],
+              ),
+            ),
+            if (!_selecting) ...[
+              IconButton(
+                onPressed: () => _edit(m),
+                icon: Icon(Icons.edit_outlined,
+                    size: 16, color: AppColors.textSub),
+                visualDensity: VisualDensity.compact,
+                tooltip: '编辑',
+              ),
+              IconButton(
+                onPressed: () => _delete(m),
+                icon: Icon(Icons.close_rounded,
+                    size: 18, color: AppColors.textSub),
+                visualDensity: VisualDensity.compact,
+                tooltip: '删除',
+              ),
+            ],
+          ],
+        ),
       ),
     );
+  }
+
+  /// 切换批量管理中某条记忆的选中状态。
+  void _toggleSelect(int? id) {
+    if (id == null) return;
+    setState(() {
+      if (_selected.contains(id)) {
+        _selected.remove(id);
+      } else {
+        _selected.add(id);
+      }
+    });
+  }
+
+  /// 长按复制记忆内容。
+  Future<void> _copyMemory(String content) async {
+    await Clipboard.setData(ClipboardData(text: content));
+    if (!mounted) return;
+    showFrostedSnack(context, '已复制');
+  }
+
+  /// 批量管理底栏:已选数量 + 删除选中 + 取消。
+  Widget _selectionBar() {
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          border: Border(top: BorderSide(color: AppColors.line)),
+        ),
+        child: Row(
+          children: [
+            Text('已选 ${_selected.length} 条',
+                style: TextStyle(fontSize: 13, color: AppColors.textSub)),
+            const Spacer(),
+            TextButton(
+              onPressed: () => setState(() {
+                _selecting = false;
+                _selected.clear();
+              }),
+              child: const Text('取消'),
+            ),
+            const SizedBox(width: 4),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.card,
+                foregroundColor: const Color(0xFFC62828),
+                side: const BorderSide(color: Color(0xFFC62828)),
+              ),
+              onPressed: _selected.isEmpty ? null : _deleteSelected,
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              label: const Text('删除选中'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 批量删除选中的记忆,先确认后执行。
+  Future<void> _deleteSelected() async {
+    if (_selected.isEmpty) return;
+    final ok = await showConfirmDialog(
+      context,
+      title: '删除所选 ${_selected.length} 条记忆?',
+      message: '此操作不可撤销(可撤销),确认删除?',
+      confirmText: '删除',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    try {
+      final items = _items.where((m) => _selected.contains(m.id)).toList();
+      for (final m in items) {
+        await _service.delete(m.id!);
+      }
+      if (!mounted) return;
+      setState(() {
+        _selecting = false;
+        _selected.clear();
+      });
+      await _reload();
+      if (!mounted) return;
+      showFrostedSnack(context, '已删除 ${items.length} 条记忆');
+    } catch (e) {
+      AppLog.instance.e('批量删除记忆失败:$e');
+      if (!mounted) return;
+      _showSnack('删除失败,请重试');
+    }
   }
 
   /// 重要性星星(黄/灰,最多 5 颗,按 /2 折算显示)。

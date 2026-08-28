@@ -9,7 +9,7 @@ class DbHelper {
   static final DbHelper instance = DbHelper._();
 
   /// 当前数据库版本(结构变更时递增)
-  static const int dbVersion = 16;
+  static const int dbVersion = 17;
 
   Database? _db;
 
@@ -230,6 +230,32 @@ class DbHelper {
         }
         if (!colNames.contains('tags')) {
           await db.execute('ALTER TABLE memories ADD COLUMN tags TEXT');
+        }
+      }
+    }
+    // v17:会话文件夹 —— chat_sessions 加 folder_id(归入文件夹),并建
+    // session_folders 表(按列/表存在性补齐,兼容旧库)。
+    if (oldVersion < 17) {
+      final hasFolders = await db.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type='table' AND name='session_folders'")
+          .then((r) => r.isNotEmpty);
+      if (!hasFolders) {
+        await db.execute('''
+          CREATE TABLE session_folders(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+          )
+        ''');
+      }
+      final hasSessions = await db.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type='table' AND name='chat_sessions'")
+          .then((r) => r.isNotEmpty);
+      if (hasSessions) {
+        final cols = await db.rawQuery('PRAGMA table_info(chat_sessions)');
+        final hasFolderId = cols.any((c) => c['name'] == 'folder_id');
+        if (!hasFolderId) {
+          await db.execute('ALTER TABLE chat_sessions ADD COLUMN folder_id INTEGER');
         }
       }
     }
@@ -468,11 +494,13 @@ class DbHelper {
 
   /// 闲话铺会话表:chat_sessions(会话)+ chat_messages(消息)。
   /// v12 起取消「零点万事清零」,聊天按会话长期保存。
+  /// v17 起 chat_sessions 带 folder_id(归入会话文件夹),并建 session_folders 表。
   static Future<void> _createChatTables(Database db) async {
     await db.execute('''
       CREATE TABLE chat_sessions(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL DEFAULT '',
+        folder_id INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
@@ -490,5 +518,12 @@ class DbHelper {
     ''');
     await db.execute(
         'CREATE INDEX idx_chat_msg_session ON chat_messages(session_id)');
+    await db.execute('''
+      CREATE TABLE session_folders(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
   }
 }

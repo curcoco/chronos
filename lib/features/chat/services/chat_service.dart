@@ -20,6 +20,47 @@ class ChatService {
     return rows.map(ChatSession.fromMap).toList();
   }
 
+  /// 会话文件夹列表(按名称排序)
+  Future<List<SessionFolder>> folders() async {
+    final db = await _db.database;
+    final rows = await db.query('session_folders', orderBy: 'name ASC');
+    return rows.map(SessionFolder.fromMap).toList();
+  }
+
+  /// 新建会话文件夹,返回新 id。
+  Future<int> createFolder(String name) async {
+    final db = await _db.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return db.insert('session_folders', SessionFolder(
+      name: name.trim(),
+      createdAt: now,
+    ).toMap());
+  }
+
+  /// 重命名文件夹。
+  Future<void> renameFolder(int id, String name) async {
+    final db = await _db.database;
+    await db.update('session_folders', {'name': name.trim()},
+        where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// 删除文件夹(文件夹内的会话变为未归档,不删除会话)。
+  Future<void> deleteFolder(int id) async {
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      await txn.update('chat_sessions', {'folder_id': null},
+          where: 'folder_id = ?', whereArgs: [id]);
+      await txn.delete('session_folders', where: 'id = ?', whereArgs: [id]);
+    });
+  }
+
+  /// 把会话移动到指定文件夹(null = 移出到未归档)。
+  Future<void> moveSession(int sessionId, int? folderId) async {
+    final db = await _db.database;
+    await db.update('chat_sessions', {'folder_id': folderId},
+        where: 'id = ?', whereArgs: [sessionId]);
+  }
+
   /// 新建会话,返回新会话 id。
   /// [firstMessage] 非空时,会话标题取该消息截断(如「闲聊」)。
   Future<int> createSession({String? firstMessage}) async {
@@ -31,6 +72,33 @@ class ChatService {
       createdAt: now,
       updatedAt: now,
     ).toMap());
+  }
+
+  /// 建立一个「分支」新会话:以既有的一串消息为新会话的初始历史,
+  /// 以便在一个对话里从某条消息继续分叉,原会话保持不变。
+  /// 消息按原 created_at 落库(保持顺序),新会话 updated_at 为当前。
+  Future<int> branchSession({required List<ChatMessage> msgs, String? title}) async {
+    if (msgs.isEmpty) return -1;
+    final db = await _db.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return db.transaction<int>((txn) async {
+      final sid = await txn.insert('chat_sessions', ChatSession(
+        title: (title == null || title.trim().isEmpty) ? '分支' : title.trim(),
+        createdAt: now,
+        updatedAt: now,
+      ).toMap());
+      for (final m in msgs) {
+        await txn.insert('chat_messages', ChatMessage(
+          sessionId: sid,
+          role: m.role,
+          content: m.content,
+          imagePath: m.imagePath,
+          reasoningContent: m.reasoningContent,
+          createdAt: m.createdAt,
+        ).toMap());
+      }
+      return sid;
+    });
   }
 
   /// 会话标题:取首条消息前 12 个字符(按 grapheme,emoji/ZWJ 序列不会被切半)。

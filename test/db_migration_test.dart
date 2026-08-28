@@ -621,6 +621,72 @@ void main() {
     });
   });
 
+  group('DB 迁移 v17:会话文件夹(folder_id + session_folders 表)', () {
+    /// 造一个 v16 结构的库(chat_sessions 无 folder_id,无 session_folders 表)。
+    Future<Database> openV16() async {
+      final db = await databaseFactory.openDatabase(
+        uniqueMemPath(),
+        options: OpenDatabaseOptions(version: 16),
+      );
+      await db.execute('''
+        CREATE TABLE chat_sessions(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL DEFAULT '',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      ''');
+      return db;
+    }
+
+    test('迁移后 chat_sessions 有 folder_id,session_folders 表可读写', () async {
+      final db = await openV16();
+      await db.insert('chat_sessions',
+          {'title': '闲聊', 'created_at': 1, 'updated_at': 1});
+
+      await DbHelper.runMigrations(db, 16, DbHelper.dbVersion);
+
+      // 旧数据仍在,默认无 folder(未归档)
+      final old = await db.query('chat_sessions');
+      expect(old.length, 1);
+      expect(old.first['folder_id'], isNull);
+      // folder_id 可写:归入文件夹
+      final fid = await db.insert('session_folders',
+          {'name': '工作', 'created_at': 1});
+      await db.update('chat_sessions', {'folder_id': fid},
+          where: 'id = ?', whereArgs: [old.first['id']]);
+      final row =
+          (await db.query('chat_sessions', where: 'id = ?', whereArgs: [old.first['id']]))
+              .single;
+      expect(row['folder_id'], fid);
+      await db.close();
+    });
+
+    test('已含 folder_id / session_folders 的库再次迁移不报错(幂等)', () async {
+      final db = await openV16();
+      await db.execute('ALTER TABLE chat_sessions ADD COLUMN folder_id INTEGER');
+      await db.execute('''
+        CREATE TABLE session_folders(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        )
+      ''');
+
+      await DbHelper.runMigrations(db, 16, DbHelper.dbVersion);
+
+      final cols = (await db.rawQuery('PRAGMA table_info(chat_sessions)'))
+          .map((c) => c['name'] as String)
+          .toSet();
+      expect(cols.contains('folder_id'), isTrue);
+      final hasTable = await db.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type='table' AND name='session_folders'")
+          .then((r) => r.isNotEmpty);
+      expect(hasTable, isTrue);
+      await db.close();
+    });
+  });
+
   group('CoinService 事务原子性(修复「并发/连点重复发币」)', () {
     setUp(() async {
       // 每个测试用全新库文件:关闭单例连接并删除 db(含 wal/shm)。

@@ -2,12 +2,15 @@
 class ChatSession {
   final int? id;
   final String title;
+  /// 所属会话文件夹 id(v17 起;null = 未归档)。
+  final int? folderId;
   final int createdAt;
   final int updatedAt;
 
   const ChatSession({
     this.id,
     required this.title,
+    this.folderId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -15,6 +18,7 @@ class ChatSession {
   factory ChatSession.fromMap(Map<String, Object?> map) => ChatSession(
         id: map['id'] as int?,
         title: map['title'] as String,
+        folderId: map['folder_id'] as int?,
         createdAt: map['created_at'] as int,
         updatedAt: map['updated_at'] as int,
       );
@@ -22,8 +26,30 @@ class ChatSession {
   Map<String, Object?> toMap() => {
         if (id != null) 'id': id,
         'title': title,
+        if (folderId != null) 'folder_id': folderId,
         'created_at': createdAt,
         'updated_at': updatedAt,
+      };
+}
+
+/// 会话文件夹(给会话分组用;v17 起)。
+class SessionFolder {
+  final int? id;
+  final String name;
+  final int createdAt;
+
+  const SessionFolder({this.id, required this.name, required this.createdAt});
+
+  factory SessionFolder.fromMap(Map<String, Object?> map) => SessionFolder(
+        id: map['id'] as int?,
+        name: map['name'] as String,
+        createdAt: map['created_at'] as int,
+      );
+
+  Map<String, Object?> toMap() => {
+        if (id != null) 'id': id,
+        'name': name,
+        'created_at': createdAt,
       };
 }
 
