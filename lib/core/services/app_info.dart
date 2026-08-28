@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart' show rootBundle;
 
-import 'package:student_workbench/core/services/key_store.dart';
+import 'package:chronos/core/services/key_store.dart';
 
 /// 更新检查结果
 class UpdateStatus {
@@ -34,7 +34,7 @@ class AppInfo {
   AppInfo._();
 
   /// 离线兜底用的「最新版本」参照,每次发版时与 pubspec.yaml 的 version 同步更新。
-  static const String latestVersion = '1.9.0';
+  static const String latestVersion = '2.3.0';
 
   /// 默认更新源:阿里云服务器 120.76.230.67 的静态更新源(chronos-update 服务,
   /// 端口 18011)。latest.json 与 APK 都放服务器 /opt/chronos-update/ 目录。

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/features/ledger/services/ledger_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/widgets/confirm_dialog.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/features/ledger/widgets/ledger_format.dart';
+import 'package:chronos/features/ledger/services/ledger_service.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/widgets/confirm_dialog.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/features/ledger/widgets/ledger_format.dart';
 
 /// 记账「分类 / 设置」Tab:预设分类展示、自定义分类增删、起始余额、月度预算。
 class LedgerCatsTab extends StatefulWidget {

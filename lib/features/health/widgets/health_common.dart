@@ -3,7 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/theme.dart';
+import 'package:chronos/core/theme.dart';
 
 /// 分类/类型圆角胶囊选择器(厨房分类、运动类型复用)。
 class CatChip extends StatelessWidget {

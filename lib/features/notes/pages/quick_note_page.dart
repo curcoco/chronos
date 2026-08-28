@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/features/notes/models/note.dart';
-import 'package:student_workbench/routes.dart';
-import 'package:student_workbench/features/notes/services/note_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/core/widgets/app_text_field.dart';
-import 'package:student_workbench/core/widgets/confirm_dialog.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/core/widgets/mood_badge.dart';
-import 'package:student_workbench/features/diary/pages/diary_page.dart';
-import 'package:student_workbench/features/notes/pages/note_detail_page.dart';
-import 'package:student_workbench/features/notes/pages/note_history_page.dart';
+import 'package:chronos/features/notes/models/note.dart';
+import 'package:chronos/routes.dart';
+import 'package:chronos/features/notes/services/note_service.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/core/widgets/app_text_field.dart';
+import 'package:chronos/core/widgets/confirm_dialog.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/core/widgets/mood_badge.dart';
+import 'package:chronos/core/widgets/status_views.dart';
+import 'package:chronos/features/diary/pages/diary_page.dart';
+import 'package:chronos/features/notes/pages/note_detail_page.dart';
+import 'package:chronos/features/notes/pages/note_history_page.dart';
 
 /// 灵感速记页(底部 + 号 / 启动页快速记一笔 / 侧边栏直达)。
 /// 聊天式布局:灵感专区在记录框上方;保存按钮在输入框右侧。
@@ -30,15 +32,9 @@ class _QuickNotePageState extends State<QuickNotePage> {
 
   List<Note> _notes = [];
   bool _loading = true;
+  String? _loadError; // 灵感专区加载失败(渲染 ErrorView + 重试)
   bool _favOnly = false;
   bool _saving = false; // 防止「完成」键与发送按钮/换行回调重复触发保存
-  String? _mood; // 本次记录的心情(null=无)
-
-  static const List<(String, String)> _moodOptions = [
-    ('happy', '开心'),
-    ('calm', '平静'),
-    ('sad', '难过'),
-  ];
 
   @override
   void initState() {
@@ -54,12 +50,22 @@ class _QuickNotePageState extends State<QuickNotePage> {
   }
 
   Future<void> _load() async {
-    final notes = await _noteService.notes();
-    if (!mounted) return;
-    setState(() {
-      _notes = notes;
-      _loading = false;
-    });
+    try {
+      final notes = await _noteService.notes();
+      if (!mounted) return;
+      setState(() {
+        _notes = notes;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      AppLog.instance.e('灵感专区加载失败:$e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = '灵感专区加载失败,请重试';
+      });
+    }
   }
 
   /// 收藏置顶,其余按时间倒序
@@ -81,16 +87,16 @@ class _QuickNotePageState extends State<QuickNotePage> {
     }
     setState(() => _saving = true);
     try {
-      await _noteService.addNote(text, mood: _mood);
+      await _noteService.addNote(text);
       _ctrl.clear();
-      setState(() => _mood = null); // 心情仅记一次,写完复位
       // 保持聚焦,方便连写多条
       _focusNode.requestFocus();
       await _load();
       _showSnack('已保存到灵感专区');
     } catch (e) {
-      // 之前保存失败是静默的(如 DB 缺列),这里显式反馈,避免"点了没反应"。
-      _showSnack('保存失败:$e');
+      // 之前保存失败是静默的(如 DB 缺列),这里显式反馈 + 落日志。
+      AppLog.instance.e('灵感保存失败:$e');
+      _showSnack('保存失败,请重试');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -114,17 +120,29 @@ class _QuickNotePageState extends State<QuickNotePage> {
 
   Future<void> _delete(Note note) async {
     final removed = note; // 记住被删记录用于撤销
-    await _noteService.deleteNote(note.id!);
-    await _load();
-    if (!mounted) return;
-    showUndoSnack(
-      context,
-      '已删除',
-      onUndo: () async {
-        await _noteService.restore(removed);
-        await _load();
-      },
-    );
+    try {
+      await _noteService.deleteNote(note.id!);
+      await _load();
+      if (!mounted) return;
+      showUndoSnack(
+        context,
+        '已删除',
+        onUndo: () async {
+          try {
+            await _noteService.restore(removed);
+            await _load();
+          } catch (e) {
+            AppLog.instance.e('撤销删除灵感失败:$e');
+          }
+        },
+      );
+    } catch (e) {
+      // 行已从 UI 消失但 DB 未删:重载恢复真实数据,并给出反馈。
+      AppLog.instance.e('删除灵感失败:$e');
+      await _load();
+      if (!mounted) return;
+      _showSnack('删除失败,请重试');
+    }
   }
 
   void _showSnack(String msg) {
@@ -195,9 +213,20 @@ class _QuickNotePageState extends State<QuickNotePage> {
             const Divider(height: 1),
             // 灵感专区列表(在记录框上方)
             Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : display.isEmpty
+              child: _loadError != null
+                  ? ErrorView(
+                      message: _loadError!,
+                      onRetry: () {
+                        setState(() {
+                          _loadError = null;
+                          _loading = true;
+                        });
+                        _load();
+                      },
+                    )
+                  : _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : display.isEmpty
                       ? Center(
                           child: _favOnly
                               ? Text(
@@ -249,20 +278,6 @@ class _QuickNotePageState extends State<QuickNotePage> {
                               _noteTile(display[i]),
                         ),
             ),
-            // 心情标记(可选,随笔已合并进灵感速记)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-              child: Row(
-                children: [
-                  Text('心情',
-                      style:
-                          TextStyle(fontSize: 12, color: AppColors.textSub)),
-                  const SizedBox(width: 8),
-                  _moodChip(null, '无'),
-                  for (final m in _moodOptions) _moodChip(m.$1, m.$2),
-                ],
-              ),
-            ),
             // 聊天式输入区:输入框 + 右侧保存按钮
             Container(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
@@ -279,23 +294,24 @@ class _QuickNotePageState extends State<QuickNotePage> {
                     child: AppTextField(
                       controller: _ctrl,
                       focusNode: _focusNode,
-                      autofocus: true,
+                      // 不自动弹键盘:底部导航切过来是浏览场景,
+                      // 想写时点输入框再弹,避免「一看功能就被键盘打断」。
+                      autofocus: false,
                       minLines: 1,
                       maxLines: 5,
                       maxLength: 200,
-                      hintText: '记录灵感,可换行;写完点右侧保存',
+                      hintText: '记录灵感…',
                       // 灵感速记为换行框:回车正常换行,保存只走右侧发送按钮。
                       submitOnEnter: false,
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // 发送按钮:用 IconButton(自带稳定的点击热区)包一层圆形底色,
-                  // 避免此前 FilledButton 受全局主题 minimumSize 影响导致点击无响应。
+                  // 发送按钮:圆形底色与输入区一致(不抢眼),纸飞机用主题蓝。
                   Container(
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: AppColors.primary,
+                      color: AppColors.card,
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
@@ -309,44 +325,17 @@ class _QuickNotePageState extends State<QuickNotePage> {
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.white),
+                                    Colors.grey),
                               ),
                             )
-                          : const Icon(Icons.send_rounded,
-                              size: 22, color: Colors.white),
+                          : Icon(Icons.send_rounded,
+                              size: 22, color: AppColors.primaryDark),
                     ),
                   ),
                 ],
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _moodChip(String? value, String label) {
-    final selected = _mood == value;
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: InkWell(
-        onTap: () => setState(() => _mood = value),
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.primary : AppColors.card,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-                color: selected ? AppColors.primary : AppColors.line),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              color: selected ? Colors.white : AppColors.textSub,
-            ),
-          ),
         ),
       ),
     );

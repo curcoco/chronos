@@ -3,6 +3,13 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- app 内下载更新:调起系统安装器安装新 APK -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- 聊天图片保存到相册:Android 9 及以下需要存储权限(10+ 走 MediaStore 无需) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28"/>
+    <!-- 后台生成通知:Android 13+ 通知权限 + 前台服务(掌柜退后台继续回复时保活) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <!-- usesCleartextTraffic:更新源与 Nocturne 外置记忆均为用户自配的 http 服务,
          需允许明文流量。若后续全部迁 https,可移除此属性。 -->
     <application
@@ -32,6 +39,11 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- 后台生成前台服务:掌柜回复时保活进程(Android 14 dataSync 类型) -->
+        <service
+            android:name=".ChatForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"/>
         <!-- 更新下载:暴露 APK 所在目录给系统安装器 -->
         <provider
             android:name="androidx.core.content.FileProvider"

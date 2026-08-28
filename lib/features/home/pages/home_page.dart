@@ -1,31 +1,32 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/data/cities.dart';
-import 'package:student_workbench/core/data/daily_content.dart';
-import 'package:student_workbench/features/tasks/models/student_task.dart';
-import 'package:student_workbench/routes.dart';
-import 'package:student_workbench/features/coins/services/coin_service.dart';
-import 'package:student_workbench/features/notes/services/note_service.dart';
-import 'package:student_workbench/core/services/settings_service.dart';
-import 'package:student_workbench/features/tasks/services/task_service.dart';
-import 'package:student_workbench/core/services/weather_service.dart';
-import 'package:student_workbench/core/services/app_log.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/features/home/widgets/home_coin_card.dart';
-import 'package:student_workbench/features/home/widgets/home_english_card.dart';
-import 'package:student_workbench/features/home/widgets/home_header.dart';
-import 'package:student_workbench/features/home/widgets/home_note_card.dart';
-import 'package:student_workbench/features/home/widgets/home_onboarding_card.dart';
-import 'package:student_workbench/features/home/widgets/home_today_card.dart';
-import 'package:student_workbench/features/home/widgets/home_weather_strip.dart';
-import 'package:student_workbench/features/tasks/widgets/task_confirm_dialog.dart';
-import 'package:student_workbench/features/settings/pages/api_settings_page.dart';
-import 'package:student_workbench/features/coins/pages/coin_center_page.dart';
-import 'package:student_workbench/features/diary/pages/diary_page.dart';
-import 'package:student_workbench/features/ledger/services/ledger_service.dart';
-import 'package:student_workbench/features/ledger/widgets/ledger_entry_sheet.dart';
+import 'package:chronos/core/data/cities.dart';
+import 'package:chronos/core/data/daily_content.dart';
+import 'package:chronos/features/tasks/models/student_task.dart';
+import 'package:chronos/routes.dart';
+import 'package:chronos/features/coins/services/coin_service.dart';
+import 'package:chronos/features/notes/services/note_service.dart';
+import 'package:chronos/core/services/settings_service.dart';
+import 'package:chronos/features/tasks/services/task_service.dart';
+import 'package:chronos/core/services/weather_service.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/core/widgets/status_views.dart';
+import 'package:chronos/features/home/widgets/home_coin_card.dart';
+import 'package:chronos/features/home/widgets/home_english_card.dart';
+import 'package:chronos/features/home/widgets/home_header.dart';
+import 'package:chronos/features/home/widgets/home_note_card.dart';
+import 'package:chronos/features/home/widgets/home_onboarding_card.dart';
+import 'package:chronos/features/home/widgets/home_today_card.dart';
+import 'package:chronos/features/home/widgets/home_weather_strip.dart';
+import 'package:chronos/features/tasks/widgets/task_confirm_dialog.dart';
+import 'package:chronos/features/settings/pages/api_settings_page.dart';
+import 'package:chronos/features/coins/pages/coin_center_page.dart';
+import 'package:chronos/features/diary/pages/diary_page.dart';
+import 'package:chronos/features/ledger/services/ledger_service.dart';
+import 'package:chronos/features/ledger/widgets/ledger_entry_sheet.dart';
 
 /// 首页仪表盘:今日任务概览 / 灵感快捷速记 / 每日英语一句 / 金币入口。
 /// 各卡片 UI 拆到 widgets/home/ 下的独立组件,本页只负责状态加载与组装。
@@ -44,6 +45,7 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _noteCtrl = TextEditingController();
 
   bool _loading = true;
+  String? _loadError; // 首页数据加载失败(渲染 ErrorView + 重试,不再永久转圈)
   bool _savingNote = false; // 灵感速记保存去抖
   bool _showOnboarding = false; // 首次引导卡
   String _avatarPath = ''; // 用户头像本地路径
@@ -81,28 +83,40 @@ class _HomePageState extends State<HomePage> {
   Future<void> _init() async {
     final now = DateTime.now();
     final date = todayStr();
-    final results = await Future.wait<Object>([
-      _taskService.todayTasks(date),
-      CoinService.instance.balance(),
-      CoinService.instance.earnedToday(date),
-      SettingsService.instance.nickname(),
-      SettingsService.instance.isOnboardingDone(),
-      SettingsService.instance.avatarPath(),
-    ]);
-    if (!mounted) return;
-    setState(() {
-      _tasks = results[0] as List<StudentTask>;
-      _coin = results[1] as int;
-      _todayEarned = results[2] as int;
-      _nickname = results[3] as String;
-      _showOnboarding = !(results[4] as bool);
-      _avatarPath = results[5] as String;
-      _quote = DailyContent.quoteFor(date);
-      _english = DailyContent.englishFor(now);
-      _dateLabel = monthDayLabel(now);
-      _week = weekdayLabel(now);
-      _loading = false;
-    });
+    try {
+      final results = await Future.wait<Object>([
+        _taskService.todayTasks(date),
+        CoinService.instance.balance(),
+        CoinService.instance.earnedToday(date),
+        SettingsService.instance.nickname(),
+        SettingsService.instance.isOnboardingDone(),
+        SettingsService.instance.avatarPath(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _tasks = results[0] as List<StudentTask>;
+        _coin = results[1] as int;
+        _todayEarned = results[2] as int;
+        _nickname = results[3] as String;
+        _showOnboarding = !(results[4] as bool);
+        _avatarPath = results[5] as String;
+        _quote = DailyContent.quoteFor(date);
+        _english = DailyContent.englishFor(now);
+        _dateLabel = monthDayLabel(now);
+        _week = weekdayLabel(now);
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      // 任一查询失败:记日志 + 渲染错误态(可重试),避免永久转圈。
+      AppLog.instance.e('首页数据加载失败:$e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = '首页数据加载失败,请重试';
+      });
+      return;
+    }
     await _loadWeather();
   }
 
@@ -136,17 +150,24 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _reload() async {
-    final date = todayStr();
-    final tasks = await _taskService.todayTasks(date);
-    final coin = await CoinService.instance.balance();
-    final earned = await CoinService.instance.earnedToday(date);
-    if (!mounted) return;
-    setState(() {
-      _tasks = tasks;
-      _coin = coin;
-      _todayEarned = earned;
-    });
-    await _loadWeather();
+    try {
+      final date = todayStr();
+      final tasks = await _taskService.todayTasks(date);
+      final coin = await CoinService.instance.balance();
+      final earned = await CoinService.instance.earnedToday(date);
+      if (!mounted) return;
+      setState(() {
+        _tasks = tasks;
+        _coin = coin;
+        _todayEarned = earned;
+        _loadError = null;
+      });
+      await _loadWeather();
+    } catch (e) {
+      AppLog.instance.e('首页刷新失败:$e');
+      if (!mounted) return;
+      _showSnack('刷新失败,请重试');
+    }
   }
 
   void _showSnack(String msg) {
@@ -214,24 +235,30 @@ class _HomePageState extends State<HomePage> {
       builder: (_) => LedgerEntrySheet(customCats: const []),
     );
     if (result == null || !mounted) return;
-    await LedgerService().addTxn(
-      type: result.type,
-      amount: result.amount,
-      category: result.category,
-      note: result.note,
-      date: result.date,
-    );
-    // 当天记一笔 → 记账打卡(每日一次,受金币上限约束)
-    if (result.date == todayStr()) {
-      final coin =
-          await CoinService.instance.rewardLedgerCheckin(todayStr());
+    try {
+      await LedgerService().addTxn(
+        type: result.type,
+        amount: result.amount,
+        category: result.category,
+        note: result.note,
+        date: result.date,
+      );
+      // 当天记一笔 → 记账打卡(每日一次,受金币上限约束)
+      if (result.date == todayStr()) {
+        final coin =
+            await CoinService.instance.rewardLedgerCheckin(todayStr());
+        if (!mounted) return;
+        _showSnack(coin > 0 ? '已记一笔,打卡成功,金币 +$coin' : '已记一笔');
+      } else {
+        if (!mounted) return;
+        _showSnack('已记一笔');
+      }
+      await _reload();
+    } catch (e) {
+      AppLog.instance.e('首页记一笔失败:$e');
       if (!mounted) return;
-      _showSnack(coin > 0 ? '已记一笔,打卡成功,金币 +$coin' : '已记一笔');
-    } else {
-      if (!mounted) return;
-      _showSnack('已记一笔');
+      _showSnack('保存失败,请重试');
     }
-    await _reload();
   }
 
   Future<void> _closeOnboarding() async {
@@ -243,9 +270,20 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
+      child: _loadError != null
+          ? ErrorView(
+              message: _loadError!,
+              onRetry: () {
+                setState(() {
+                  _loadError = null;
+                  _loading = true;
+                });
+                _init();
+              },
+            )
+          : _loading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
               onRefresh: _reload,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),

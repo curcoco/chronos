@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/features/health/models/workout.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/features/health/widgets/health_common.dart';
+import 'package:chronos/features/health/models/workout.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/features/health/widgets/health_common.dart';
 
 /// 健康「运动日历」Tab:月度热力图 + 运动统计。
 class HealthHeatTab extends StatelessWidget {

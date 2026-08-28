@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
-import 'package:student_workbench/core/data/daily_content.dart';
-import 'package:student_workbench/core/data/english_content.dart';
-import 'package:student_workbench/features/english/models/english_fav.dart';
-import 'package:student_workbench/features/coins/services/coin_service.dart';
-import 'package:student_workbench/features/english/services/english_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
+import 'package:chronos/core/data/daily_content.dart';
+import 'package:chronos/core/data/english_content.dart';
+import 'package:chronos/features/english/models/english_fav.dart';
+import 'package:chronos/features/coins/services/coin_service.dart';
+import 'package:chronos/features/english/services/english_service.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/core/widgets/status_views.dart';
 
 /// 英文积累:每日一句 / 每日单词 / 每日阅读 / 每日写作提示 + 收藏 + 学习打卡领金币
 class EnglishPage extends StatefulWidget {
@@ -31,6 +33,7 @@ class _EnglishPageState extends State<EnglishPage> {
   List<EnglishFav> _favs = [];
   Set<String> _favKeys = {}; // 'type:content' 快速判断
   bool _loading = true;
+  String? _loadError; // 英文内容加载失败(渲染 ErrorView + 重试)
   bool _checkinDone = false;
 
   @override
@@ -50,52 +53,71 @@ class _EnglishPageState extends State<EnglishPage> {
     try {
       await _tts.setLanguage('en-US');
       await _tts.setSpeechRate(0.5);
-    } catch (_) {}
+    } catch (e) {
+      AppLog.instance.e('TTS 初始化失败:$e');
+    }
   }
 
   Future<void> _speak(String text) async {
     try {
       await _tts.stop();
       await _tts.speak(text);
-    } catch (_) {}
+    } catch (e) {
+      AppLog.instance.e('TTS 朗读失败:$e');
+    }
   }
 
   Future<void> _init() async {
-    final favs = await _service.favs();
-    final checkin = await CoinService.instance.earnedOfType(_date, 'english');
-    if (!mounted) return;
-    setState(() {
-      _quote = DailyContent.englishFor(DateTime.now());
-      _words = EnglishContent.wordsFor(_date);
-      _reading = EnglishContent.readingFor(_date);
-      _writing = EnglishContent.writingFor(_date);
-      _favs = favs;
-      _favKeys = favs.map((f) => '${f.type}:${f.content}').toSet();
-      _checkinDone = checkin > 0;
-      _loading = false;
-    });
+    try {
+      final favs = await _service.favs();
+      final checkin = await CoinService.instance.earnedOfType(_date, 'english');
+      if (!mounted) return;
+      setState(() {
+        _quote = DailyContent.englishFor(DateTime.now());
+        _words = EnglishContent.wordsFor(_date);
+        _reading = EnglishContent.readingFor(_date);
+        _writing = EnglishContent.writingFor(_date);
+        _favs = favs;
+        _favKeys = favs.map((f) => '${f.type}:${f.content}').toSet();
+        _checkinDone = checkin > 0;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      AppLog.instance.e('英文页加载失败:$e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = '内容加载失败,请重试';
+      });
+    }
   }
 
   Future<void> _toggle(String type, String title, String content) async {
-    final nowFav = await _service.toggle(type, title, content);
-    if (!mounted) return;
-    final key = '$type:$content';
-    setState(() {
-      if (nowFav) {
-        _favKeys.add(key);
-        _favs.insert(
-            0,
-            EnglishFav(
-                type: type,
-                title: title,
-                content: content,
-                createdAt: DateTime.now().millisecondsSinceEpoch));
-      } else {
-        _favKeys.remove(key);
-        _favs.removeWhere((f) => f.type == type && f.content == content);
-      }
-    });
-    _showSnack(nowFav ? '已收藏' : '已取消收藏');
+    try {
+      final nowFav = await _service.toggle(type, title, content);
+      if (!mounted) return;
+      final key = '$type:$content';
+      setState(() {
+        if (nowFav) {
+          _favKeys.add(key);
+          _favs.insert(
+              0,
+              EnglishFav(
+                  type: type,
+                  title: title,
+                  content: content,
+                  createdAt: DateTime.now().millisecondsSinceEpoch));
+        } else {
+          _favKeys.remove(key);
+          _favs.removeWhere((f) => f.type == type && f.content == content);
+        }
+      });
+      _showSnack(nowFav ? '已收藏' : '已取消收藏');
+    } catch (e) {
+      AppLog.instance.e('收藏切换失败:$e');
+      _showSnack('操作失败,请重试');
+    }
   }
 
   Future<void> _checkin() async {
@@ -103,14 +125,19 @@ class _EnglishPageState extends State<EnglishPage> {
       _showSnack('今日已打卡,明天再来吧');
       return;
     }
-    final coin = await CoinService.instance.rewardEnglish(_date);
-    if (!mounted) return;
-    if (coin > 0) {
-      setState(() => _checkinDone = true);
-      _showSnack('学习打卡成功,金币 +$coin');
-    } else {
-      _showSnack('今日已达金币上限,已记录打卡');
-      setState(() => _checkinDone = true);
+    try {
+      final coin = await CoinService.instance.rewardEnglish(_date);
+      if (!mounted) return;
+      if (coin > 0) {
+        setState(() => _checkinDone = true);
+        _showSnack('学习打卡成功,金币 +$coin');
+      } else {
+        _showSnack('今日已达金币上限,已记录打卡');
+        setState(() => _checkinDone = true);
+      }
+    } catch (e) {
+      AppLog.instance.e('英文打卡失败:$e');
+      _showSnack('打卡失败,请重试');
     }
   }
 
@@ -133,9 +160,20 @@ class _EnglishPageState extends State<EnglishPage> {
             ],
           ),
         ),
-        body: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : TabBarView(
+        body: _loadError != null
+            ? ErrorView(
+                message: _loadError!,
+                onRetry: () {
+                  setState(() {
+                    _loadError = null;
+                    _loading = true;
+                  });
+                  _init();
+                },
+              )
+            : _loading
+                ? const Center(child: CircularProgressIndicator())
+                : TabBarView(
                 children: [_buildToday(), _buildFavs()],
               ),
       ),

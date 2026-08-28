@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/services/key_store.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
+import 'package:chronos/core/services/key_store.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
 
-/// API 配置:中转站 / elevenlabs / 心知天气 / 外置记忆(Nocturne)的地址与密钥。
-/// 全部存本机(SharedPreferences),不入源码;密钥输入框默认遮显。
+/// API 配置:搜索(Tavily) / 语音(elevenlabs) / 天气 / 外置记忆(Nocturne)。
+/// 中转站与模型已由「设置 → 模型与服务」的提供商 / 模型页管理,不在本页。
+/// 全部存本机安全存储,不入源码;密钥输入框默认遮显。
 class ApiSettingsPage extends StatefulWidget {
   const ApiSettingsPage({super.key});
 
@@ -16,41 +17,52 @@ class ApiSettingsPage extends StatefulWidget {
 class _ApiSettingsPageState extends State<ApiSettingsPage> {
   final Map<String, TextEditingController> _ctrls = {};
   final Set<String> _secret = {
-    KeyStore.llmApiKey,
     KeyStore.elevenApiKey,
     KeyStore.weatherApiKey,
     KeyStore.nocturneToken,
+    KeyStore.tavilyApiKey,
+    KeyStore.imageGenKey,
   };
   final Set<String> _revealed = {};
 
+  /// 中转站相关键由「模型与服务 → 提供商」管理,本页不渲染。
+  static const Set<String> _providerKeys = {
+    KeyStore.llmBaseUrl,
+    KeyStore.llmApiKey,
+    KeyStore.llmModel,
+    KeyStore.llmFastModel,
+    KeyStore.llmOcrModel,
+  };
+
   static const Map<String, String> _labels = {
-    KeyStore.llmBaseUrl: '中转站地址',
-    KeyStore.llmApiKey: '中转站 API Key',
-    KeyStore.llmModel: '对话模型',
-    KeyStore.llmFastModel: '快速模型(记忆提炼)',
+    KeyStore.tavilyApiKey: 'Tavily API Key(联网搜索)',
     KeyStore.elevenApiKey: 'elevenlabs API Key',
     KeyStore.elevenVoiceId: '语音 ID',
     KeyStore.weatherApiKey: '心知天气 Key',
     KeyStore.nocturneUrl: '外置记忆地址',
     KeyStore.nocturneToken: '外置记忆 token',
+    KeyStore.imageGenUrl: '生图模型地址',
+    KeyStore.imageGenKey: '生图模型 Key',
+    KeyStore.imageGenModel: '生图模型 ID',
   };
 
   static const Map<String, String> _hints = {
-    KeyStore.llmBaseUrl: 'https://…/v1',
-    KeyStore.llmApiKey: 'sk-…',
-    KeyStore.llmModel: '如 deepseek-chat / gpt-4o-mini',
-    KeyStore.llmFastModel: '如 deepseek-chat(留空则复用对话模型)',
+    KeyStore.tavilyApiKey: 'tvly-…(https://app.tavily.com 获取)',
     KeyStore.elevenApiKey: 'sk_…',
     KeyStore.elevenVoiceId: '如 BqljjWyTnrioXPCNkCd4',
     KeyStore.weatherApiKey: '心知天气私钥',
     KeyStore.nocturneUrl: 'http://host:8000/mcp(Nocturne MCP)',
     KeyStore.nocturneToken: 'MCP 访问鉴权 token',
+    KeyStore.imageGenUrl: '如 https://中转站/v1(支持 /images/generations)',
+    KeyStore.imageGenKey: '可复用中转站 Key',
+    KeyStore.imageGenModel: '如 gpt-image-2',
   };
 
   @override
   void initState() {
     super.initState();
     for (final k in KeyStore.allKeys) {
+      if (_providerKeys.contains(k)) continue;
       _ctrls[k] = TextEditingController();
       KeyStore.instance.get(k).then((v) {
         if (mounted) _ctrls[k]!.text = v;
@@ -68,6 +80,10 @@ class _ApiSettingsPageState extends State<ApiSettingsPage> {
 
   Future<void> _save() async {
     for (final k in KeyStore.allKeys) {
+      // 更新源地址由「系统设置」页单独编辑;这里不渲染也不写回,
+      // 避免本页保存时用旧值覆盖用户刚改的更新源。
+      if (k == KeyStore.updateCheckUrl) continue;
+      if (_providerKeys.contains(k)) continue;
       await KeyStore.instance.set(k, _ctrls[k]!.text);
     }
     if (!mounted) return;
@@ -88,15 +104,16 @@ class _ApiSettingsPageState extends State<ApiSettingsPage> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Text(
-              '所有密钥仅保存在本机,不会写入源码或上传。'
-              '含密钥的字段输入时默认遮显,点眼睛可查看。',
+              '中转站与聊天/快速/OCR 模型请到「设置 → 模型与服务」配置。\n以下密钥仅存本机,字段默认遮显,可点眼睛查看。',
               style: TextStyle(fontSize: 12, color: Color(0xFFE65100), height: 1.5),
             ),
           ),
           const SizedBox(height: 12),
           for (final k in KeyStore.allKeys) ...[
-            _field(k),
-            const SizedBox(height: 10),
+            if (!_providerKeys.contains(k)) ...[
+              _field(k),
+              const SizedBox(height: 10),
+            ],
           ],
           const SizedBox(height: 6),
           FilledButton(onPressed: _save, child: const Text('保存配置')),

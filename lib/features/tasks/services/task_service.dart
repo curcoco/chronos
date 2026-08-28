@@ -1,9 +1,9 @@
 import 'package:sqflite/sqflite.dart';
 
-import 'package:student_workbench/core/data/daily_content.dart';
-import 'package:student_workbench/features/tasks/models/student_task.dart';
-import 'package:student_workbench/features/coins/services/coin_service.dart';
-import 'package:student_workbench/core/services/db_helper.dart';
+import 'package:chronos/core/data/daily_content.dart';
+import 'package:chronos/features/tasks/models/student_task.dart';
+import 'package:chronos/features/coins/services/coin_service.dart';
+import 'package:chronos/core/services/db_helper.dart';
 
 /// 任务切换结果
 class ToggleResult {
@@ -39,22 +39,26 @@ class TaskService {
 
   Future<void> ensureDailyTasks(String date) async {
     final db = await _db.database;
-    final count = Sqflite.firstIntValue(await db.rawQuery(
-            'SELECT COUNT(*) FROM tasks WHERE task_date = ?', [date])) ??
-        0;
-    if (count > 0) return;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    for (final t in DailyContent.autoTasksFor(date)) {
-      await db.insert('tasks', StudentTask(
-        title: t.title,
-        category: t.category,
-        priority: 1, // 默认中优先级
-        done: false,
-        date: date,
-        auto: true,
-        createdAt: now,
-      ).toMap());
-    }
+    // 存在性检查 + 插入在同一事务:并发进入(首页刷新/多入口)不会重复生成,
+    // 中途失败整体回滚,不留半截任务。
+    await db.transaction((txn) async {
+      final count = Sqflite.firstIntValue(await txn.rawQuery(
+              'SELECT COUNT(*) FROM tasks WHERE task_date = ?', [date])) ??
+          0;
+      if (count > 0) return;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      for (final t in DailyContent.autoTasksFor(date)) {
+        await txn.insert('tasks', StudentTask(
+          title: t.title,
+          category: t.category,
+          priority: 1, // 默认中优先级
+          done: false,
+          date: date,
+          auto: true,
+          createdAt: now,
+        ).toMap());
+      }
+    });
   }
 
   Future<StudentTask> addTask({
@@ -94,29 +98,35 @@ class TaskService {
   /// 勾选/取消勾选任务;勾选时发金币并检查全部完成奖励,
   /// 取消勾选时收回对应金币(任务奖励 + 全部完成奖励)。
   /// 返回值为正=获得,负=收回。
+  /// 任务状态变更与金币发放/收回在**同一个事务**里:任一步失败整体回滚,
+  /// 不会出现「勾选成功但没发币 / 取消成功但币没收回」的跨表分叉。
   Future<ToggleResult> toggleTask(StudentTask task, String date) async {
     final db = await _db.database;
-    if (task.done) {
-      // 取消完成:收回该任务奖励;若当日不再全部完成,再收回全部完成奖励
-      await db.update('tasks', {'done': 0},
+    return db.transaction((txn) async {
+      if (task.done) {
+        // 取消完成:收回该任务奖励;若当日不再全部完成,再收回全部完成奖励
+        await txn.update('tasks', {'done': 0},
+            where: 'id = ?', whereArgs: [task.id]);
+        final revokedTask =
+            await CoinService.instance.revokeTask(task, date, executor: txn);
+        final revokedBonus =
+            await CoinService.instance.revokeAllDone(date, executor: txn);
+        return ToggleResult(coin: -revokedTask, bonus: -revokedBonus);
+      }
+      await txn.update('tasks', {'done': 1},
           where: 'id = ?', whereArgs: [task.id]);
-      final revokedTask = await CoinService.instance.revokeTask(task, date);
-      final revokedBonus = await CoinService.instance.revokeAllDone(date);
-      return ToggleResult(coin: -revokedTask, bonus: -revokedBonus);
-    }
-    await db.update('tasks', {'done': 1},
-        where: 'id = ?', whereArgs: [task.id]);
 
-    final coin = await CoinService.instance.rewardTask(task, date);
-    var bonus = 0;
-    if (await isAllDone(date)) {
-      bonus = await CoinService.instance.rewardAllDone(date);
-    }
-    return ToggleResult(coin: coin, bonus: bonus);
+      final coin = await CoinService.instance.rewardTask(task, date, executor: txn);
+      var bonus = 0;
+      if (await isAllDone(date, executor: txn)) {
+        bonus = await CoinService.instance.rewardAllDone(date, executor: txn);
+      }
+      return ToggleResult(coin: coin, bonus: bonus);
+    });
   }
 
-  Future<bool> isAllDone(String date) async {
-    final db = await _db.database;
+  Future<bool> isAllDone(String date, {DatabaseExecutor? executor}) async {
+    final db = executor ?? await _db.database;
     final total = Sqflite.firstIntValue(await db.rawQuery(
             'SELECT COUNT(*) FROM tasks WHERE task_date = ?', [date])) ??
         0;

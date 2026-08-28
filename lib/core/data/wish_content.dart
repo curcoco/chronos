@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import 'package:student_workbench/core/data/content_store.dart';
+import 'package:chronos/core/data/content_store.dart';
 
 /// 系统随机心愿池(金币中心「随机心愿」用,支持远程覆盖)
 class WishContent {

@@ -5,27 +5,26 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'package:student_workbench/routes.dart';
-import 'package:student_workbench/core/services/app_info.dart';
-import 'package:student_workbench/core/services/settings_service.dart';
-import 'package:student_workbench/core/services/update_installer.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/features/settings/pages/extension_service_page.dart';
-import 'package:student_workbench/features/settings/pages/settings_page.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/features/coins/pages/coin_center_page.dart';
-import 'package:student_workbench/features/diary/pages/diary_page.dart';
-import 'package:student_workbench/features/english/pages/english_page.dart';
-import 'package:student_workbench/features/health/pages/health_page.dart';
-import 'package:student_workbench/features/review/pages/review_page.dart';
+import 'package:chronos/routes.dart';
+import 'package:chronos/core/services/app_info.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/services/settings_service.dart';
+import 'package:chronos/core/services/update_installer.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/features/settings/pages/extension_service_page.dart';
+import 'package:chronos/features/settings/pages/settings_page.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/features/coins/pages/coin_center_page.dart';
+import 'package:chronos/features/diary/pages/diary_page.dart';
+import 'package:chronos/features/english/pages/english_page.dart';
+import 'package:chronos/features/health/pages/health_page.dart';
+import 'package:chronos/features/review/pages/review_page.dart';
 
-/// 侧边栏:应用信息 + 版本与更新 + 导航快捷 + 系统设置入口。
+/// 侧边栏:应用信息 + 版本与更新 + 系统设置入口 + 功能模块。
 /// 水玻璃风格:整体半透明 + BackdropFilter 背景模糊,露出背后页面。
+/// (底部导航已覆盖 5 个一级 Tab,侧边栏不再重复导航,专注二级模块与设置。)
 class AppDrawer extends StatefulWidget {
-  final int currentIndex;
-  final ValueChanged<int> onSelectTab;
-
-  const AppDrawer({super.key, required this.currentIndex, required this.onSelectTab});
+  const AppDrawer({super.key});
 
   @override
   State<AppDrawer> createState() => _AppDrawerState();
@@ -188,7 +187,8 @@ class _AppDrawerState extends State<AppDrawer> {
       if (!mounted) return;
       setState(() => _avatarPath = dest.path);
       showFrostedSnack(context, '头像已更新');
-    } catch (_) {
+    } catch (e) {
+      AppLog.instance.e('设置头像失败:$e');
       if (!mounted) return;
       showFrostedSnack(context, '头像设置失败,请重试');
     }
@@ -244,7 +244,8 @@ class _AppDrawerState extends State<AppDrawer> {
                         end: Alignment.bottomRight,
                         colors: isDarkMode
                             ? const [Color(0xFF16222E), Color(0xFF1E3A4C)]
-                            : const [Color(0xFFD6EDFF), Color(0xFFB3E5FC)],
+                            // 浅色跟随当前色板,换主题色系时抽屉头部同步变色。
+                            : [AppColors.background, AppColors.primaryLight],
                       ),
                     ),
                     child: Row(
@@ -258,15 +259,13 @@ class _AppDrawerState extends State<AppDrawer> {
                               gradient: LinearGradient(
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
-                                colors: [AppColors.primaryLight, AppColors.primary],
+                                colors: [AppColors.primaryLight, AppColors.primarySoft],
                               ),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(Icons.school_rounded,
                                 size: 26,
-                                color: isDarkMode
-                                    ? const Color(0xFF07222E)
-                                    : Colors.white),
+                                color: AppColors.onPrimarySoft),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -351,22 +350,6 @@ class _AppDrawerState extends State<AppDrawer> {
                   Padding(
                     padding: EdgeInsets.fromLTRB(20, 10, 20, 2),
                     child: Text(
-                      '导航',
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSub),
-                    ),
-                  ),
-                  _navTile(0, Icons.home_rounded, '首页'),
-                  _navTile(1, Icons.checklist_rounded, '计划'),
-                  _navTile(2, Icons.edit_note_rounded, '灵感速记'),
-                  _navTile(3, Icons.account_balance_wallet_rounded, '记账'),
-                  _navTile(4, Icons.smart_toy_rounded, '闲话铺'),
-                  const Divider(height: 1),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(20, 10, 20, 2),
-                    child: Text(
                       '功能模块',
                       style: TextStyle(
                           fontSize: 12,
@@ -383,33 +366,25 @@ class _AppDrawerState extends State<AppDrawer> {
                       Icons.menu_book_rounded, '写日记', const DiaryPage()),
                   _moduleTile(
                       Icons.monetization_on_rounded, '金币中心', const CoinCenterPage()),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: Icon(Icons.settings_outlined,
-                        size: 22, color: AppColors.textSub),
-                    title: Text(
-                      '系统设置',
-                      style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textMain),
-                    ),
-                    trailing: Icon(Icons.chevron_right_rounded,
-                        size: 20, color: AppColors.textSub),
-                    // 磨砂玻璃导航按钮
-                    tileColor: _glassColor(),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    onTap: _openSettings,
-                  ),
                   const Spacer(),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(20, 8, 20, 16),
-                    child: Text(
-                      '纯本地存储,仅更新检查需联网',
-                      style: TextStyle(fontSize: 11, color: AppColors.textSub),
+                  // 系统设置:置于抽屉最底部。
+                  _frostTile(
+                    onTap: _openSettings,
+                    child: ListTile(
+                      leading: Icon(Icons.settings_outlined,
+                          size: 22, color: AppColors.primaryDark),
+                      title: Text(
+                        '系统设置',
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textMain),
+                      ),
+                      trailing: Icon(Icons.chevron_right_rounded,
+                          size: 20, color: AppColors.textSub),
                     ),
                   ),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),
@@ -424,50 +399,47 @@ class _AppDrawerState extends State<AppDrawer> {
       ? const Color(0xFF243342).withValues(alpha: 0.5)
       : Colors.white.withValues(alpha: 0.5);
 
-  Widget _navTile(int index, IconData icon, String label) {
-    final selected = widget.currentIndex == index;
-    return ListTile(
-      leading: Icon(icon,
-          size: 22,
-          color: selected ? AppColors.primaryDark : AppColors.textSub),
-      title: Text(
-        label,
-        style: TextStyle(
-          fontSize: 15,
-          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-          color: selected ? AppColors.primaryDark : AppColors.textMain,
+  /// 磨砂玻璃列表按钮:圆角裁剪 + BackdropFilter 背景模糊 + 半透明底色,
+  /// 在抽屉水玻璃背景之上再叠一层,每个按钮呈独立的毛玻璃块(不再只是半透明色)。
+  Widget _frostTile({required VoidCallback onTap, required Widget child}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Material(
+            color: _glassColor(),
+            child: InkWell(
+              onTap: onTap,
+              child: child,
+            ),
+          ),
         ),
       ),
-      selected: selected,
-      // 磨砂玻璃导航按钮:半透明底色,选中态用主题色提亮
-      tileColor: _glassColor(),
-      selectedTileColor: AppColors.primaryLight.withValues(alpha: 0.45),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      onTap: () => widget.onSelectTab(index),
     );
   }
 
   /// 功能模块入口:关抽屉后 push 模块页。
   Widget _moduleTile(IconData icon, String label, Widget page) {
-    return ListTile(
-      leading: Icon(icon, size: 22, color: AppColors.textSub),
-      title: Text(
-        label,
-        style: TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-          color: AppColors.textMain,
-        ),
-      ),
-      trailing:
-          Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textSub),
-      // 磨砂玻璃导航按钮
-      tileColor: _glassColor(),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return _frostTile(
       onTap: () {
         Navigator.of(context).pop(); // 先关抽屉
         AppRoutes.push(context, page);
       },
+      child: ListTile(
+        leading: Icon(icon, size: 22, color: AppColors.textSub),
+        title: Text(
+          label,
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textMain,
+          ),
+        ),
+        trailing:
+            Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textSub),
+      ),
     );
   }
 }

@@ -1,20 +1,28 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-import 'package:student_workbench/routes.dart';
-import 'package:student_workbench/core/services/app_info.dart';
-import 'package:student_workbench/core/services/backup_service.dart';
-import 'package:student_workbench/core/services/key_store.dart';
-import 'package:student_workbench/core/services/settings_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/widgets/confirm_dialog.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/core/widgets/section_card.dart';
-import 'package:student_workbench/core/widgets/update_download_button.dart';
-import 'package:student_workbench/features/settings/pages/api_settings_page.dart';
-import 'package:student_workbench/features/settings/pages/extension_service_page.dart';
-import 'package:student_workbench/features/shell/pages/splash_page.dart';
+import 'package:chronos/routes.dart';
+import 'package:chronos/core/services/app_info.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/services/backup_service.dart';
+import 'package:chronos/core/services/key_store.dart';
+import 'package:chronos/core/services/settings_service.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/widgets/confirm_dialog.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/core/widgets/section_card.dart';
+import 'package:chronos/core/widgets/update_download_button.dart';
+import 'package:chronos/features/settings/pages/api_settings_page.dart';
+import 'package:chronos/features/settings/pages/chat_files_page.dart';
+import 'package:chronos/features/settings/pages/extension_service_page.dart';
+import 'package:chronos/features/settings/pages/model_roles_page.dart';
+import 'package:chronos/features/settings/pages/provider_list_page.dart';
+import 'package:chronos/features/shell/pages/splash_page.dart';
 
 /// 系统设置:关于(应用名、简介)+ 版本号与更新状态
 class SettingsPage extends StatefulWidget {
@@ -96,6 +104,24 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _exporting = false;
   bool _restoring = false;
 
+  /// 导出诊断包(数据库 + 日志 + 设置,不含密钥),用于问题复现排查。
+  Future<void> _exportDiagnostic() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final path = await BackupService.instance.exportDiagnosticZip();
+      if (!mounted) return;
+      showFrostedSnack(context, '诊断包已导出,可发送给开发者排查问题');
+      await Share.shareXFiles([XFile(path)], subject: 'Chronos 诊断包');
+    } catch (e) {
+      AppLog.instance.e('导出诊断包失败:$e');
+      if (!mounted) return;
+      showFrostedSnack(context, '导出失败,请重试');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   Future<void> _exportData() async {
     if (_exporting) return;
     setState(() => _exporting = true);
@@ -110,8 +136,9 @@ class _SettingsPageState extends State<SettingsPage> {
       // 顺手唤起系统分享,方便直接发送/另存到网盘或换机
       await Share.shareXFiles([XFile(path)], subject: 'Chronos 数据备份');
     } catch (e) {
+      AppLog.instance.e('导出备份失败:$e');
       if (!mounted) return;
-      showFrostedSnack(context, '导出失败:$e');
+      showFrostedSnack(context, '导出失败,请重试');
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
@@ -131,8 +158,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final confirm = await showConfirmDialog(
       context,
       title: '用备份覆盖当前数据?',
-      message: '将用所选备份里的数据(任务 / 心愿 / 金币 / 日记 / 记忆 / 计划 / 记账等)'
-          '覆盖当前全部本地数据,现有数据会被替换。恢复前会自动保留一份当前数据副本。'
+      message: '用备份覆盖当前全部本地数据,恢复前自动保留副本。'
           '\n\nAPI 密钥不受影响。',
       confirmText: '覆盖恢复',
       destructive: true,
@@ -148,15 +174,17 @@ class _SettingsPageState extends State<SettingsPage> {
       await SettingsService.instance.loadThemeMode();
       if (!mounted) return;
       showFrostedSnack(context,
-          '恢复完成:数据库已导入,设置项 ${result.prefsRestored} 项。即将重启…');
+          '恢复完成:数据库 + ${result.prefsRestored} 项设置,即将重启…');
       // 恢复后重建到启动页,让所有页面用新数据重新加载(等提示看得见再跳)。
       await Future<void>.delayed(const Duration(milliseconds: 900));
       if (!mounted) return;
       AppRoutes.pushAndRemoveUntil(context, const SplashPage());
     } catch (e) {
+      AppLog.instance.e('恢复备份失败:$e');
       if (!mounted) return;
-      final msg = e is FormatException ? e.message : '$e';
-      showFrostedSnack(context, '恢复失败:$msg');
+      // zip 解析类错误(选错文件等)给出具体原因,其余给友好文案。
+      final msg = e is FormatException ? e.message : '恢复失败,请重试';
+      showFrostedSnack(context, msg);
     } finally {
       if (mounted) setState(() => _restoring = false);
     }
@@ -186,7 +214,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
-                            colors: [AppColors.primaryLight, AppColors.primary],
+                            colors: [AppColors.primaryLight, AppColors.primarySoft],
                           ),
                           shape: BoxShape.circle,
                           boxShadow: [
@@ -197,10 +225,10 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                           ],
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.school_rounded,
                           size: 30,
-                          color: Colors.white,
+                          color: AppColors.onPrimarySoft,
                         ),
                       ),
                     ),
@@ -293,7 +321,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                   subtitle: Text(
-                    '默认阿里云服务器;可改为你的 OSS 等静态地址',
+                    '默认阿里云,可改自己的静态地址',
                     style: TextStyle(fontSize: 11, color: AppColors.textSub),
                   ),
                   trailing: Icon(Icons.chevron_right_rounded,
@@ -302,7 +330,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  '纯本地存储,数据保存在设备上;仅版本更新检查需要联网。',
+                  '纯本地存储,仅更新检查需联网',
                   style: TextStyle(fontSize: 12, color: AppColors.textSub),
                 ),
               ],
@@ -324,7 +352,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '深色模式适合夜间使用;跟随系统会随手机设置自动切换',
+                  '深色适合夜间;跟随系统自动切换',
                   style: TextStyle(fontSize: 12, color: AppColors.textSub),
                 ),
                 const SizedBox(height: 12),
@@ -356,12 +384,176 @@ class _SettingsPageState extends State<SettingsPage> {
                     );
                   },
                 ),
+                const SizedBox(height: 16),
+                Text(
+                  '主题配色',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMain,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '六套浅色主题,切换即时生效',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSub),
+                ),
+                const SizedBox(height: 10),
+                _paletteSelector(),
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                Text(
+                  '背景图片',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMain,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '选一张图铺满全部页面背景,可调透明度',
+                  style: TextStyle(
+                      fontSize: 12, color: AppColors.textSub, height: 1.5),
+                ),
+                const SizedBox(height: 6),
+                ValueListenableBuilder<bool>(
+                  valueListenable: SettingsService.instance.backgroundEnabled,
+                  builder: (context, enabled, _) => SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      '启用背景图',
+                      style: TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                    value: enabled,
+                    onChanged: (v) =>
+                        SettingsService.instance.setBackgroundEnabled(v),
+                  ),
+                ),
+                _backgroundPicker(),
+                ValueListenableBuilder<double>(
+                  valueListenable:
+                      SettingsService.instance.backgroundOpacity,
+                  builder: (context, opacity, _) => Row(
+                    children: [
+                      Text('透明度',
+                          style: TextStyle(
+                              fontSize: 13, color: AppColors.textSub)),
+                      Expanded(
+                        child: Slider(
+                          value: opacity,
+                          min: 0.3,
+                          max: 1.0,
+                          onChanged: (v) => SettingsService.instance
+                              .setBackgroundOpacity(v),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 40,
+                        child: Text('${(opacity * 100).round()}%',
+                            textAlign: TextAlign.end,
+                            style: TextStyle(
+                                fontSize: 12, color: AppColors.textSub)),
+                      ),
+                    ],
+                  ),
+                ),
+                // 背景图高斯模糊度:0 = 不模糊。
+                ValueListenableBuilder<double>(
+                  valueListenable: SettingsService.instance.backgroundBlur,
+                  builder: (context, blur, _) => Row(
+                    children: [
+                      Text('模糊度',
+                          style: TextStyle(
+                              fontSize: 13, color: AppColors.textSub)),
+                      Expanded(
+                        child: Slider(
+                          value: blur,
+                          min: 0,
+                          max: 30,
+                          divisions: 30,
+                          onChanged: (v) =>
+                              SettingsService.instance.setBackgroundBlur(v),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 40,
+                        child: Text(blur == 0 ? '无' : '${blur.round()}',
+                            textAlign: TextAlign.end,
+                            style: TextStyle(
+                                fontSize: 12, color: AppColors.textSub)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
               ],
             ),
           ),
           const SizedBox(height: 14),
           SectionCard(
-            title: '数据备份',
+            title: '模型与服务',
+            child: Column(
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.dns_outlined,
+                      size: 22, color: AppColors.primaryDark),
+                  title: const Text(
+                    '提供商',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    '多个中转站,各自 地址/Key/模型',
+                    style: TextStyle(fontSize: 12, color: AppColors.textSub),
+                  ),
+                  trailing: Icon(Icons.chevron_right_rounded,
+                      size: 20, color: AppColors.textSub),
+                  onTap: () =>
+                      AppRoutes.push(context, const ProviderListPage()),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.smart_toy_outlined,
+                      size: 22, color: AppColors.primaryDark),
+                  title: const Text(
+                    '模型',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    '聊天/快速/OCR/翻译/标题 各选模型',
+                    style: TextStyle(fontSize: 12, color: AppColors.textSub),
+                  ),
+                  trailing: Icon(Icons.chevron_right_rounded,
+                      size: 20, color: AppColors.textSub),
+                  onTap: () => AppRoutes.push(context, const ModelRolesPage()),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.vpn_key_rounded,
+                      size: 22, color: AppColors.primaryDark),
+                  title: const Text(
+                    'API 配置',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    '语音 / 天气 / 搜索 / 外置记忆(密钥仅存本机)',
+                    style: TextStyle(fontSize: 12, color: AppColors.textSub),
+                  ),
+                  trailing: Icon(Icons.chevron_right_rounded,
+                      size: 20, color: AppColors.textSub),
+                  onTap: () => AppRoutes.push(context, const ApiSettingsPage()),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          SectionCard(
+            title: '数据设置',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -379,8 +571,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '把全部本地数据(任务 / 心愿 / 金币 / 日记 / 记忆 / 计划 / 记账等)'
-                  '与个人设置打包成 zip 保存到本机,便于备份或更换设备。不含 API 密钥。',
+                  '全部本地数据与设置打包成 zip,便于备份/换机。不含密钥。',
                   style: TextStyle(fontSize: 12, color: AppColors.textSub, height: 1.5),
                 ),
                 const SizedBox(height: 12),
@@ -414,8 +605,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '选择之前导出的 zip,用它覆盖当前全部本地数据(换新设备时用)。'
-                  '覆盖前会自动保留一份当前数据副本;恢复后请重启应用生效。',
+                  '选择备份 zip 覆盖当前数据(换机时用),自动保留副本',
                   style: TextStyle(
                       fontSize: 12, color: AppColors.textSub, height: 1.5),
                 ),
@@ -443,27 +633,116 @@ class _SettingsPageState extends State<SettingsPage> {
                     label: Text(_restoring ? '正在恢复…' : '从 zip 恢复'),
                   ),
                 ),
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 4),
+                FutureBuilder<bool>(
+                  future: SettingsService.instance.isAutoBackupEnabled(),
+                  builder: (context, snap) => SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      '自动备份(每周)',
+                      style: TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      '启动时距上次备份超 7 天,自动静默导出一份',
+                      style:
+                          TextStyle(fontSize: 11, color: AppColors.textSub),
+                    ),
+                    value: snap.data ?? false,
+                    onChanged: (v) async {
+                      await SettingsService.instance.setAutoBackupEnabled(v);
+                      if (!context.mounted) return;
+                      showFrostedSnack(context,
+                          v ? '已开启自动备份(每周)' : '已关闭自动备份');
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(44),
+                      foregroundColor: AppColors.textSub,
+                      side: BorderSide(color: AppColors.line),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: _exporting ? null : _exportDiagnostic,
+                    icon: const Icon(Icons.bug_report_outlined, size: 18),
+                    label: const Text('导出诊断包(日志 + 数据库)'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.photo_library_outlined,
+                      size: 22, color: AppColors.primaryDark),
+                  title: const Text(
+                    '聊天图片',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    '闲话铺发过的图片,可查看 / 删除 / 清空',
+                    style: TextStyle(fontSize: 12, color: AppColors.textSub),
+                  ),
+                  trailing: Icon(Icons.chevron_right_rounded,
+                      size: 20, color: AppColors.textSub),
+                  onTap: () => AppRoutes.push(context, const ChatFilesPage()),
+                ),
+                const SizedBox(height: 4),
+                // 后台生成通知:闲话铺退后台继续生成并弹完成通知(默认开)。
+                ValueListenableBuilder<bool>(
+                  valueListenable: SettingsService.instance.backgroundNotify,
+                  builder: (context, v, _) => SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      '后台生成通知',
+                      style: TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      '掌柜生成回复时退到后台也能继续,完成后通知你',
+                      style:
+                          TextStyle(fontSize: 12, color: AppColors.textSub),
+                    ),
+                    value: v,
+                    onChanged: (nv) async {
+                      await SettingsService.instance.setBackgroundNotify(nv);
+                      if (!context.mounted) return;
+                      showFrostedSnack(context,
+                          nv ? '已开启后台生成通知' : '已关闭后台生成通知');
+                    },
+                  ),
+                ),
+                const SizedBox(height: 4),
+                // Auto Memory:掌柜在对话中自主写/改/删「关于用户的档案」(默认开)。
+                ValueListenableBuilder<bool>(
+                  valueListenable: SettingsService.instance.autoMemory,
+                  builder: (context, v, _) => SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      'AI 记忆档案(Auto Memory)',
+                      style: TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      '允许掌柜在对话中自主写入/更新/删除关于你的档案,可在「AI 长期记忆」页管理',
+                      style:
+                          TextStyle(fontSize: 12, color: AppColors.textSub),
+                    ),
+                    value: v,
+                    onChanged: (nv) async {
+                      await SettingsService.instance.setAutoMemory(nv);
+                      if (!context.mounted) return;
+                      showFrostedSnack(context,
+                          nv ? '已开启 Auto Memory' : '已关闭 Auto Memory');
+                    },
+                  ),
+                ),
               ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          SectionCard(
-            title: '联网服务',
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.vpn_key_rounded,
-                  size: 22, color: AppColors.primaryDark),
-              title: const Text(
-                'API 配置',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-              ),
-              subtitle: Text(
-                '中转站 / 语音 / 天气 / 云端同步(密钥仅存本机)',
-                style: TextStyle(fontSize: 12, color: AppColors.textSub),
-              ),
-              trailing: Icon(Icons.chevron_right_rounded,
-                  size: 20, color: AppColors.textSub),
-              onTap: () => AppRoutes.push(context, const ApiSettingsPage()),
             ),
           ),
         ],
@@ -505,6 +784,166 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
     );
+  }
+
+  /// 六套主题配色选择器(色点 + 名称,选中高亮)。
+  Widget _paletteSelector() {
+    const labels = {
+      'blue': '蓝色',
+      'pink': '粉色',
+      'green': '绿色',
+      'yellow': '黄色',
+      'black': '黑色',
+      'white': '白色',
+    };
+    return ValueListenableBuilder<String>(
+      valueListenable: SettingsService.instance.palette,
+      builder: (context, current, _) => Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          for (final entry in kAppPalettes.entries)
+            _paletteChip(
+              id: entry.key,
+              palette: entry.value,
+              label: labels[entry.key] ?? entry.key,
+              selected: current == entry.key,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _paletteChip({
+    required String id,
+    required AppPalette palette,
+    required String label,
+    required bool selected,
+  }) {
+    return InkWell(
+      onTap: () => SettingsService.instance.setPalette(id),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: palette.primaryLight.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? palette.primary : AppColors.line,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                color: palette.primary,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textMain,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 背景图选择区:缩略图 + 选择/移除。
+  Widget _backgroundPicker() {
+    return ValueListenableBuilder<String>(
+      valueListenable: SettingsService.instance.backgroundPath,
+      builder: (context, path, _) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.line),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: path.isNotEmpty
+                  ? Image.file(File(path),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => const Icon(
+                          Icons.image_outlined,
+                          size: 22,
+                          color: Colors.grey))
+                  : const Icon(Icons.image_outlined,
+                      size: 22, color: Colors.grey),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(40),
+                  foregroundColor: AppColors.primaryDark,
+                  side: BorderSide(
+                      color: AppColors.primary.withValues(alpha: 0.5)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: _pickBackground,
+                icon: const Icon(Icons.add_photo_alternate_outlined,
+                    size: 18),
+                label: Text(path.isEmpty ? '选择背景图片' : '更换背景图片',
+                    style: const TextStyle(fontSize: 13)),
+              ),
+            ),
+            if (path.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              IconButton(
+                onPressed: () async {
+                  await SettingsService.instance.setBackgroundPath('');
+                  if (!context.mounted) return;
+                  showFrostedSnack(context, '已移除背景图');
+                },
+                icon: Icon(Icons.delete_outline_rounded,
+                    size: 20, color: AppColors.textSub),
+                tooltip: '移除背景图',
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 选择背景图:压缩后复制到应用文档目录持久化(备份 zip 会带上)。
+  Future<void> _pickBackground() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1920,
+      maxHeight: 1920,
+      imageQuality: 85,
+    );
+    if (picked == null || !mounted) return;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final ext = picked.path.toLowerCase().endsWith('.png') ? 'png' : 'jpg';
+      final dest = File('${dir.path}/background.$ext');
+      await File(picked.path).copy(dest.path);
+      await SettingsService.instance.setBackgroundPath(dest.path);
+      if (!mounted) return;
+      showFrostedSnack(context, '背景图已设置,可调透明度');
+    } catch (_) {
+      if (!mounted) return;
+      showFrostedSnack(context, '背景图设置失败,请重试');
+    }
   }
 
   Widget _buildStatusChip(UpdateStatus? status) {

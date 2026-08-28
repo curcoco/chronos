@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/widgets/app_text_field.dart';
-import 'package:student_workbench/core/widgets/section_card.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/widgets/app_text_field.dart';
+import 'package:chronos/core/widgets/section_card.dart';
 
 /// 首页灵感速记卡:单行输入 + 提交按钮 + 写日记入口。
 class HomeNoteCard extends StatelessWidget {
@@ -54,27 +54,30 @@ class HomeNoteCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              SizedBox(
+              // 发送按钮:圆形底色与卡片一致(不抢眼),纸飞机用主题蓝(与速记页统一)。
+              Container(
                 width: 52,
                 height: 46,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(52, 46),
-                    shape: const CircleBorder(),
-                  ),
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
                   onPressed: saving ? null : onSubmit,
-                  child: saving
+                  padding: EdgeInsets.zero,
+                  tooltip: '保存灵感',
+                  icon: saving
                       ? const SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.grey),
                           ),
                         )
-                      : const Icon(Icons.send_rounded, size: 20),
+                      : Icon(Icons.send_rounded,
+                          size: 20, color: AppColors.primaryDark),
                 ),
               ),
             ],

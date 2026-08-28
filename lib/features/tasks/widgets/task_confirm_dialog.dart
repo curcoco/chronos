@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/features/tasks/models/student_task.dart';
-import 'package:student_workbench/features/coins/services/coin_service.dart';
+import 'package:chronos/features/tasks/models/student_task.dart';
+import 'package:chronos/features/coins/services/coin_service.dart';
 
 /// 勾选 / 取消勾选任务前的确认弹窗。返回 true 表示用户确认执行。
 /// - 完成:提示可领取的金币;若已到每日上限则提示不再得币。

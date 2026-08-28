@@ -51,6 +51,13 @@ String fullDateTimeLabel(int ts) {
   return '${t.year}年${t.month}月${t.day}日 ${_two(t.hour)}:${_two(t.minute)}';
 }
 
+/// 时间戳 → 「2026/08/15 23:53:12」(24 小时制、精确到秒)—— 灵感速记时间轴用
+String timelineLabel(int ts) {
+  final t = DateTime.fromMillisecondsSinceEpoch(ts);
+  return '${t.year}/${_two(t.month)}/${_two(t.day)} '
+      '${_two(t.hour)}:${_two(t.minute)}:${_two(t.second)}';
+}
+
 /// DateTime → 「yyyy-MM-dd」
 String dateKey(DateTime d) =>
     '${d.year}-${_two(d.month)}-${_two(d.day)}';

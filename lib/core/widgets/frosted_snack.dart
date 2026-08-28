@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/widgets/overlay_toast.dart';
+import 'package:chronos/core/widgets/overlay_toast.dart';
 
 /// 磨砂玻璃提示条(转发到自绘 Overlay 实现,见 overlay_toast.dart)。
 ///

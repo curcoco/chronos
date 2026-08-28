@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/core/widgets/confirm_dialog.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/features/chat/services/llm_service.dart';
-import 'package:student_workbench/features/memory/models/memory_item.dart';
-import 'package:student_workbench/features/memory/services/memory_extractor.dart';
-import 'package:student_workbench/features/memory/services/memory_service.dart';
-import 'package:student_workbench/features/chat/services/chat_service.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/core/widgets/confirm_dialog.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/core/widgets/status_views.dart';
+import 'package:chronos/features/chat/services/llm_service.dart';
+import 'package:chronos/features/memory/models/memory_item.dart';
+import 'package:chronos/features/memory/services/memory_extractor.dart';
+import 'package:chronos/features/memory/services/memory_service.dart';
+import 'package:chronos/features/chat/services/chat_service.dart';
 
 /// AI 长期记忆面板(RikkaHub 式内置记忆):
 /// 查看 / 添加 / 编辑 / 删除;聊天后自动提炼,也可手动提炼。
@@ -26,6 +28,7 @@ class _MemoryPageState extends State<MemoryPage> {
   List<MemoryItem> _items = [];
   String _kind = 'all';
   bool _loading = true;
+  String? _loadError; // 记忆列表加载失败(渲染 ErrorView + 重试)
   bool _extracting = false;
 
   @override
@@ -35,70 +38,159 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   Future<void> _init() async {
-    final items = await _service.list();
-    if (!mounted) return;
-    setState(() {
-      _items = items;
-      _loading = false;
-    });
+    try {
+      final items = await _service.list();
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      AppLog.instance.e('记忆列表加载失败:$e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = '记忆加载失败,请重试';
+      });
+    }
   }
 
   Future<void> _reload() async {
-    final items = await _service.list();
-    if (!mounted) return;
-    setState(() => _items = items);
+    try {
+      final items = await _service.list();
+      if (!mounted) return;
+      setState(() => _items = items);
+    } catch (e) {
+      AppLog.instance.e('记忆列表刷新失败:$e');
+    }
   }
 
-  void _showSnack(String msg) => showFrostedSnack(context, msg);
+  void _showSnack(String msg) {
+    if (!mounted) return;
+    showFrostedSnack(context, msg);
+  }
 
   List<MemoryItem> get _display =>
       _kind == 'all' ? _items : _items.where((m) => m.kind == _kind).toList();
 
-  Future<void> _add() async {
-    final kindCtrl = ValueNotifier<String>('fact');
-    final ctrl = TextEditingController();
+  Future<void> _add() => _showEditor();
+
+  Future<void> _edit(MemoryItem item) => _showEditor(item: item);
+
+  /// 统一添加/编辑弹窗:支持类型、重要性(1~10)、置顶、可见性、标签。
+  Future<void> _showEditor({MemoryItem? item}) async {
+    final isEdit = item != null;
+    final kindCtrl = ValueNotifier<String>(item?.kind ?? 'fact');
+    final ctrl = TextEditingController(text: item?.content ?? '');
+    final tagsCtrl = TextEditingController(
+        text: item == null ? '' : item.tags.join(','));
+    var importance = item?.importance ?? 5;
+    var pinned = item?.pinned ?? false;
+    var visibility = item?.visibility ?? 'public';
+
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('添加记忆'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 8,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(isEdit ? '编辑记忆' : '添加记忆'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final k in MemoryService.kinds)
-                  ValueListenableBuilder<String>(
-                    valueListenable: kindCtrl,
-                    builder: (context, v, _) => ChoiceChip(
-                      label: Text(MemoryService.kindLabels[k] ?? k,
-                          style: const TextStyle(fontSize: 12)),
-                      selected: v == k,
-                      onSelected: (_) => kindCtrl.value = k,
-                    ),
+                // 类型(仅添加时可改)
+                if (!isEdit)
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final k in MemoryService.kinds)
+                        ValueListenableBuilder<String>(
+                          valueListenable: kindCtrl,
+                          builder: (context, v, _) => ChoiceChip(
+                            label: Text(MemoryService.kindLabels[k] ?? k,
+                                style: const TextStyle(fontSize: 12)),
+                            selected: v == k,
+                            onSelected: (_) => kindCtrl.value = k,
+                          ),
+                        ),
+                    ],
                   ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: ctrl,
+                  autofocus: !isEdit,
+                  maxLines: 3,
+                  decoration: const InputDecoration(hintText: '记忆内容,如:喜欢晚上学习'),
+                ),
+                const SizedBox(height: 12),
+                // 重要性(1~10)
+                Row(
+                  children: [
+                    const Text('重要性', style: TextStyle(fontSize: 13)),
+                    Expanded(
+                      child: Slider(
+                        value: importance.toDouble(),
+                        min: 1,
+                        max: 10,
+                        divisions: 9,
+                        label: '$importance',
+                        onChanged: (v) =>
+                            setDialogState(() => importance = v.round()),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 26,
+                      child: Text('$importance',
+                          style: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ),
+                // 置顶 与 可见性
+                Row(
+                  children: [
+                    ChoiceChip(
+                      label: const Text('置顶', style: TextStyle(fontSize: 12)),
+                      selected: pinned,
+                      onSelected: (v) => setDialogState(() => pinned = v),
+                    ),
+                    const SizedBox(width: 8),
+                    for (final v in const ['public', 'private'])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(
+                            v == 'public' ? '公开(注入)' : '私有(不注入)',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          selected: visibility == v,
+                          onSelected: (_) => setDialogState(() => visibility = v),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: tagsCtrl,
+                  decoration: const InputDecoration(
+                      hintText: '标签,用逗号分隔(可选,用于语义匹配)',
+                      prefixIcon: Icon(Icons.sell_outlined, size: 18)),
+                ),
               ],
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: ctrl,
-              autofocus: true,
-              maxLines: 3,
-              decoration: const InputDecoration(hintText: '记忆内容,如:喜欢晚上学习'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('保存'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('保存'),
-          ),
-        ],
       ),
     );
     if (result != true || !mounted) return;
@@ -107,39 +199,41 @@ class _MemoryPageState extends State<MemoryPage> {
       _showSnack('记忆内容不能为空');
       return;
     }
-    await _service.add(kind: kindCtrl.value, content: content);
-    await _reload();
-    _showSnack('已保存记忆');
+    final tags = _parseTags(tagsCtrl.text);
+    try {
+      if (isEdit) {
+        await _service.update(item.id!, content,
+            importance: importance,
+            pinned: pinned,
+            visibility: visibility,
+            tags: tags);
+        _showSnack('已更新');
+      } else {
+        await _service.add(
+          kind: kindCtrl.value,
+          content: content,
+          importance: importance,
+          pinned: pinned,
+          visibility: visibility,
+          tags: tags,
+        );
+        _showSnack('已保存记忆');
+      }
+      await _reload();
+    } catch (e) {
+      AppLog.instance.e('${isEdit ? '编辑' : '添加'}记忆失败:$e');
+      _showSnack('保存失败,请重试');
+    }
   }
 
-  Future<void> _edit(MemoryItem item) async {
-    final ctrl = TextEditingController(text: item.content);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('编辑记忆'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          maxLines: 3,
-          decoration: const InputDecoration(hintText: '记忆内容'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(ctrl.text.trim()),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-    );
-    if (result == null || result.isEmpty || !mounted) return;
-    await _service.update(item.id!, result);
-    await _reload();
-    _showSnack('已更新');
+  /// 解析标签:支持英文逗号/中文逗号/竖线/空白分隔,去重、去空。
+  static List<String> _parseTags(String raw) {
+    final parts = raw
+        .split(RegExp(r'[,，|、\s]+'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    return parts.toSet().toList();
   }
 
   Future<void> _delete(MemoryItem item) async {
@@ -151,16 +245,33 @@ class _MemoryPageState extends State<MemoryPage> {
       destructive: true,
     );
     if (!ok || !mounted) return;
-    await _service.delete(item.id!);
-    await _reload();
-    _showSnack('已删除');
+    try {
+      await _service.delete(item.id!);
+      await _reload();
+      if (!mounted) return;
+      showUndoSnack(
+        context,
+        '已删除记忆',
+        onUndo: () async {
+          try {
+            await _service.restore(item);
+            await _reload();
+          } catch (e) {
+            AppLog.instance.e('撤销删除记忆失败:$e');
+          }
+        },
+      );
+    } catch (e) {
+      AppLog.instance.e('删除记忆失败:$e');
+      _showSnack('删除失败,请重试');
+    }
   }
 
   /// 手动提炼:从最近对话提取记忆(与聊天后的自动提炼同一逻辑)。
   Future<void> _extract() async {
     if (_extracting) return;
     if (!await LlmService.instance.isConfigured()) {
-      _showSnack('聊天服务未配置,请先到 系统设置 → API 配置 填写');
+      _showSnack('聊天服务未配置,请先到 API 配置');
       return;
     }
     final sessions = await ChatService.instance.sessions();
@@ -185,7 +296,8 @@ class _MemoryPageState extends State<MemoryPage> {
       await _reload();
       if (!mounted) return;
       _showSnack(result.added > 0 ? '已提炼 ${result.added} 条记忆' : '本次没有提炼到新记忆');
-    } catch (_) {
+    } catch (e) {
+      AppLog.instance.e('记忆提炼失败:$e');
       if (!mounted) return;
       _showSnack('提炼失败,请检查网络或配置');
     } finally {
@@ -213,9 +325,20 @@ class _MemoryPageState extends State<MemoryPage> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
+      body: _loadError != null
+          ? ErrorView(
+              message: _loadError!,
+              onRetry: () {
+                setState(() {
+                  _loadError = null;
+                  _loading = true;
+                });
+                _init();
+              },
+            )
+          : _loading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
               children: [
                 Container(
@@ -226,9 +349,9 @@ class _MemoryPageState extends State<MemoryPage> {
                     border: Border.all(color: AppColors.line),
                   ),
                   child: Text(
-                    '记忆全部保存在本机(SQLite)。聊天后小掌柜会自动提炼'
-                    '画像 / 事实 / 摘要;也可手动添加或编辑。'
-                    '如需接外置记忆服务,见「系统设置 → API 配置 → 外置记忆」。',
+                    '记忆存在本机。掌柜会在对话中自主维护「关于你的档案」(标注 AI 档案),'
+                    '聊天后也会自动提炼;也可手动添加。'
+                    '外置记忆在「API 配置」里设置。',
                     style: TextStyle(
                         fontSize: 11,
                         color: AppColors.textSub,
@@ -315,6 +438,25 @@ class _MemoryPageState extends State<MemoryPage> {
                 Text(m.content,
                     style: const TextStyle(fontSize: 14, height: 1.5)),
                 const SizedBox(height: 3),
+                Row(
+                  children: [
+                    // 重要性(1~10)
+                    _stars(m.importance),
+                    if (m.source == 'auto') ...[
+                      _metaBadge('AI 档案', const Color(0xFF1565C0)),
+                    ],
+                    if (m.pinned) ...[
+                      _metaBadge('置顶', AppColors.primaryDark),
+                    ],
+                    if (m.visibility == 'private') ...[
+                      _metaBadge('私有', const Color(0xFF8E24AA)),
+                    ],
+                    if (m.tags.isNotEmpty) ...[
+                      for (final t in m.tags.take(2))
+                        _metaBadge(t, AppColors.textSub),
+                    ],
+                  ],
+                ),
                 Text(
                   fullDateTimeLabel(m.createdAt),
                   style: TextStyle(fontSize: 10, color: AppColors.textSub),
@@ -337,6 +479,38 @@ class _MemoryPageState extends State<MemoryPage> {
             tooltip: '删除',
           ),
         ],
+      ),
+    );
+  }
+
+  /// 重要性星星(黄/灰,最多 5 颗,按 /2 折算显示)。
+  Widget _stars(int importance) {
+    final n = ((importance + 1) ~/ 2).clamp(1, 5);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < 5; i++)
+          Icon(
+            i < n ? Icons.star_rounded : Icons.star_outline_rounded,
+            size: 13,
+            color: i < n ? const Color(0xFFF5B301) : AppColors.line,
+          ),
+      ],
+    );
+  }
+
+  Widget _metaBadge(String text, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: 10, color: color, fontWeight: FontWeight.w600)),
       ),
     );
   }

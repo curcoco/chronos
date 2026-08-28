@@ -16,10 +16,39 @@ class SettingsService {
   static const String _kOnboardingDone = 'onboarding_done';
   static const String _kLastBackupAt = 'last_backup_at';
   static const String _kAvatarPath = 'avatar_path';
+  static const String _kPalette = 'theme_palette';
+  static const String _kBackgroundEnabled = 'bg_enabled';
+  static const String _kBackgroundOpacity = 'bg_opacity';
+  static const String _kBackgroundPath = 'bg_path';
+  static const String _kBackgroundBlur = 'bg_blur';
+  static const String _kBackgroundNotify = 'bg_notify';
+  static const String _kAutoBackup = 'auto_backup';
+  static const String _kAutoMemory = 'auto_memory';
 
   /// 全局主题模式通知源:切换后 MaterialApp 监听并即时重建(无需重启)。
   final ValueNotifier<ThemeMode> themeMode =
       ValueNotifier<ThemeMode>(ThemeMode.system);
+
+  /// 主题色板 id(见 core/theme.dart kAppPalettes):切换后即时换肤。
+  final ValueNotifier<String> palette = ValueNotifier<String>('blue');
+
+  /// 背景图是否启用(启用后全 App 页面背景透出背景图)。
+  final ValueNotifier<bool> backgroundEnabled = ValueNotifier<bool>(false);
+
+  /// 后台生成通知是否启用(闲话铺退后台继续生成 + 完成通知;默认开)。
+  final ValueNotifier<bool> backgroundNotify = ValueNotifier<bool>(true);
+
+  /// Auto Memory 是否启用(AI 在对话中自主写/改/删「关于用户的认知档案」;默认开)。
+  final ValueNotifier<bool> autoMemory = ValueNotifier<bool>(true);
+
+  /// 背景图透明度(0.3 ~ 1.0)。
+  final ValueNotifier<double> backgroundOpacity = ValueNotifier<double>(0.85);
+
+  /// 背景图高斯模糊度(0 ~ 30,0 = 不模糊)。
+  final ValueNotifier<double> backgroundBlur = ValueNotifier<double>(0);
+
+  /// 背景图本地文件路径(空 = 未设置)。
+  final ValueNotifier<String> backgroundPath = ValueNotifier<String>('');
 
   /// 头像变更通知:侧边栏改头像后自增,首页等监听刷新头像显示。
   final ValueNotifier<int> avatarVersion = ValueNotifier<int>(0);
@@ -108,6 +137,70 @@ class SettingsService {
         ThemeMode.system => 'system',
       };
 
+  /// 启动时载入全部视觉设置:主题模式 + 色板 + 背景图(供 MaterialApp 初始化)。
+  Future<void> loadVisualSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    themeMode.value = _decodeThemeMode(prefs.getString(_kThemeMode));
+    palette.value = prefs.getString(_kPalette) ?? 'blue';
+    backgroundEnabled.value = prefs.getBool(_kBackgroundEnabled) ?? false;
+    backgroundNotify.value =
+        prefs.getBool(_kBackgroundNotify) ?? true;
+    autoMemory.value = prefs.getBool(_kAutoMemory) ?? true;
+    backgroundOpacity.value = (prefs.getDouble(_kBackgroundOpacity) ?? 0.85)
+        .clamp(0.3, 1.0);
+    backgroundPath.value = prefs.getString(_kBackgroundPath) ?? '';
+    backgroundBlur.value =
+        (prefs.getDouble(_kBackgroundBlur) ?? 0).clamp(0.0, 30.0);
+  }
+
+  /// 切换主题色板:即时生效并持久化。
+  Future<void> setPalette(String id) async {
+    palette.value = id;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kPalette, id);
+  }
+
+  /// 背景图开关:即时生效并持久化。
+  Future<void> setBackgroundEnabled(bool value) async {
+    backgroundEnabled.value = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kBackgroundEnabled, value);  }
+
+  /// 后台生成通知开关:即时生效并持久化。
+  Future<void> setBackgroundNotify(bool value) async {
+    backgroundNotify.value = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kBackgroundNotify, value);  }
+
+  /// Auto Memory 开关:即时生效并持久化。
+  Future<void> setAutoMemory(bool value) async {
+    autoMemory.value = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kAutoMemory, value);  }
+
+  /// 背景图透明度(0.3~1.0):即时生效并持久化。
+  Future<void> setBackgroundOpacity(double value) async {
+    final v = value.clamp(0.3, 1.0);
+    backgroundOpacity.value = v;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_kBackgroundOpacity, v);
+  }
+
+  /// 背景图路径(空 = 清除):即时生效并持久化。
+  Future<void> setBackgroundPath(String path) async {
+    backgroundPath.value = path;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kBackgroundPath, path);
+  }
+
+  /// 背景图高斯模糊度(0~30):即时生效并持久化。
+  Future<void> setBackgroundBlur(double value) async {
+    final v = value.clamp(0.0, 30.0);
+    backgroundBlur.value = v;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_kBackgroundBlur, v);
+  }
+
   /// 首次引导卡是否已展示(用户关闭后不再出现)。
   Future<bool> isOnboardingDone() async {
     final prefs = await SharedPreferences.getInstance();
@@ -140,5 +233,16 @@ class SettingsService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kAvatarPath, path);
     avatarVersion.value++;
+  }
+
+  /// 自动备份开关(开启后:启动时距上次备份超过 7 天则静默导出一次)。
+  Future<bool> isAutoBackupEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_kAutoBackup) ?? false;
+  }
+
+  Future<void> setAutoBackupEnabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kAutoBackup, value);
   }
 }

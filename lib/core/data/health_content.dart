@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import 'package:student_workbench/core/data/content_store.dart';
+import 'package:chronos/core/data/content_store.dart';
 
 /// 健康模块离线内容池:食谱菜品 / 跟练视频(全部内置,支持远程覆盖)
 class HealthContent {

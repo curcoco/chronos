@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:student_workbench/core/widgets/app_text_field.dart';
+import 'package:chronos/core/widgets/app_text_field.dart';
 
 /// AppTextField 的交互语义测试(交互层回归防护):
 /// 1) submitOnEnter=true(如首页速记):结尾换行 → 触发一次提交并剥离换行。

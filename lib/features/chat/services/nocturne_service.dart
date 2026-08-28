@@ -1,7 +1,7 @@
 import 'package:mcp_client/mcp_client.dart';
 
-import 'package:student_workbench/core/services/app_log.dart';
-import 'package:student_workbench/core/services/key_store.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/services/key_store.dart';
 
 /// 外置记忆服务(用户自配,应用只提供接口)。
 ///

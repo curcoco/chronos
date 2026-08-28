@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/theme.dart';
+import 'package:chronos/core/theme.dart';
 
 /// 添加任务弹层返回的数据
 class AddTaskResult {

@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/services/update_installer.dart';
-import 'package:student_workbench/core/theme.dart';
+import 'package:chronos/core/services/update_installer.dart';
+import 'package:chronos/core/theme.dart';
 
 /// 「下载并更新」按钮:下载 APK(带进度)→ 调起系统安装器。
 /// 状态:idle → downloading(百分比) → 打开安装页;失败可重试。

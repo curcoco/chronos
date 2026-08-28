@@ -1,5 +1,7 @@
-import 'package:student_workbench/features/notes/models/note.dart';
-import 'package:student_workbench/core/services/base_dao.dart';
+import 'package:sqflite/sqflite.dart';
+
+import 'package:chronos/features/notes/models/note.dart';
+import 'package:chronos/core/services/base_dao.dart';
 
 /// 灵感速记服务(同步到「灵感专区」)。CRUD 复用 [BaseDao]。
 class NoteService extends BaseDao<Note> {
@@ -28,7 +30,9 @@ class NoteService extends BaseDao<Note> {
   }
 
   /// 直接插入一条 Note(用于「撤销删除」恢复原记录),返回新行 id
-  Future<int> restore(Note note) => insert(note);
+  /// (幂等:记录实际未被删除时跳过,不抛主键冲突)。
+  Future<int> restore(Note note) =>
+      insert(note, conflictAlgorithm: ConflictAlgorithm.ignore);
 
   /// 最新在前
   Future<List<Note>> notes() => queryAll();

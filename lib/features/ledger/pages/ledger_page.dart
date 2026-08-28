@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/features/ledger/models/ledger_txn.dart';
-import 'package:student_workbench/features/coins/services/coin_service.dart';
-import 'package:student_workbench/features/ledger/services/ledger_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/features/ledger/widgets/ledger_calendar_tab.dart';
-import 'package:student_workbench/features/ledger/widgets/ledger_cats_tab.dart';
-import 'package:student_workbench/features/ledger/widgets/ledger_chart_tab.dart';
-import 'package:student_workbench/features/ledger/widgets/ledger_detail_tab.dart';
-import 'package:student_workbench/features/ledger/widgets/ledger_entry_sheet.dart';
-import 'package:student_workbench/features/ledger/widgets/ledger_format.dart';
+import 'package:chronos/features/ledger/models/ledger_txn.dart';
+import 'package:chronos/features/coins/services/coin_service.dart';
+import 'package:chronos/features/ledger/services/ledger_service.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/features/ledger/widgets/ledger_calendar_tab.dart';
+import 'package:chronos/features/ledger/widgets/ledger_cats_tab.dart';
+import 'package:chronos/features/ledger/widgets/ledger_chart_tab.dart';
+import 'package:chronos/features/ledger/widgets/ledger_detail_tab.dart';
+import 'package:chronos/features/ledger/widgets/ledger_entry_sheet.dart';
+import 'package:chronos/features/ledger/widgets/ledger_format.dart';
+import 'package:chronos/core/widgets/status_views.dart';
 
 /// 生活记账:余额 / 明细 / 日历 / 图表 / 预算 / 分类(纯本地)。
 /// 各 Tab 内容拆到 widgets/ledger/ 下的独立组件,本页只负责
@@ -31,6 +33,7 @@ class _LedgerPageState extends State<LedgerPage> {
   double _budget = 0;
   List<String> _customCats = [];
   bool _loading = true;
+  String? _loadError; // 账本加载失败(渲染 ErrorView + 重试)
   int _tab = 0; // 0明细 1日历 2图表 3分类
 
   @override
@@ -40,20 +43,30 @@ class _LedgerPageState extends State<LedgerPage> {
   }
 
   Future<void> _load() async {
-    final results = await Future.wait([
-      _service.txns(),
-      _service.startBalance(),
-      _service.budget(),
-      _service.customCats(),
-    ]);
-    if (!mounted) return;
-    setState(() {
-      _txns = results[0] as List<LedgerTxn>;
-      _start = results[1] as double;
-      _budget = results[2] as double;
-      _customCats = results[3] as List<String>;
-      _loading = false;
-    });
+    try {
+      final results = await Future.wait([
+        _service.txns(),
+        _service.startBalance(),
+        _service.budget(),
+        _service.customCats(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _txns = results[0] as List<LedgerTxn>;
+        _start = results[1] as double;
+        _budget = results[2] as double;
+        _customCats = results[3] as List<String>;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      AppLog.instance.e('账本加载失败:$e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = '账本加载失败,请重试';
+      });
+    }
   }
 
   void _showSnack(String msg) {
@@ -65,9 +78,20 @@ class _LedgerPageState extends State<LedgerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('生活记账')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
+      body: _loadError != null
+          ? ErrorView(
+              message: _loadError!,
+              onRetry: () {
+                setState(() {
+                  _loadError = null;
+                  _loading = true;
+                });
+                _load();
+              },
+            )
+          : _loading
+              ? const LoadingView(hint: '正在加载账本…')
+              : ListView(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
               children: [
                 _buildHero(),
@@ -80,7 +104,7 @@ class _LedgerPageState extends State<LedgerPage> {
                 const SizedBox(height: 6),
                 Center(
                   child: Text(
-                    '今日记任意一笔支出或收入,自动完成记账打卡(+1 金币,每日一次)',
+                    '今日记一笔自动打卡(+1 金币)',
                     style: TextStyle(fontSize: 11, color: AppColors.textSub),
                   ),
                 ),
@@ -88,7 +112,14 @@ class _LedgerPageState extends State<LedgerPage> {
                 _buildSeg(),
                 const SizedBox(height: 10),
                 switch (_tab) {
-                  0 => LedgerDetailTab(txns: _txns),
+                  0 => LedgerDetailTab(
+                      txns: _txns,
+                      customCats: _customCats,
+                      // 同步移除被删行(满足 Dismissible 约束);其余 Tab 共用 _txns 自动联动
+                      onRemove: (t) => setState(
+                          () => _txns.removeWhere((x) => x.id == t.id)),
+                      onChanged: _load,
+                    ),
                   1 => LedgerCalendarTab(txns: _txns),
                   2 => LedgerChartTab(txns: _txns),
                   _ => LedgerCatsTab(
@@ -121,7 +152,7 @@ class _LedgerPageState extends State<LedgerPage> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppColors.primaryLight, AppColors.primary],
+          colors: [AppColors.primaryLight, AppColors.primarySoft],
         ),
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
@@ -137,15 +168,15 @@ class _LedgerPageState extends State<LedgerPage> {
         children: [
           Text(
             '余额(起始 ${money(_start)})',
-            style: const TextStyle(fontSize: 12, color: Color(0xFFE3F4FF)),
+            style: TextStyle(fontSize: 12, color: AppColors.onPrimarySoft),
           ),
           const SizedBox(height: 2),
           Text(
             money(balance),
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.w800,
-                color: Colors.white),
+                color: AppColors.onPrimarySoft),
           ),
           const SizedBox(height: 8),
           Row(
@@ -263,21 +294,27 @@ class _LedgerPageState extends State<LedgerPage> {
       builder: (_) => LedgerEntrySheet(customCats: _customCats),
     );
     if (result == null || !mounted) return;
-    await _service.addTxn(
-      type: result.type,
-      amount: result.amount,
-      category: result.category,
-      note: result.note,
-      date: result.date,
-    );
-    await _load();
-    // 当天记一笔 → 自动完成记账打卡(每日一次,受金币上限约束)
-    if (result.date == todayStr()) {
-      final coin = await CoinService.instance.rewardLedgerCheckin(todayStr());
+    try {
+      await _service.addTxn(
+        type: result.type,
+        amount: result.amount,
+        category: result.category,
+        note: result.note,
+        date: result.date,
+      );
+      await _load();
+      // 当天记一笔 → 自动完成记账打卡(每日一次,受金币上限约束)
+      if (result.date == todayStr()) {
+        final coin = await CoinService.instance.rewardLedgerCheckin(todayStr());
+        if (!mounted) return;
+        _showSnack(coin > 0 ? '已记一笔,记账打卡成功,金币 +$coin' : '已记一笔');
+      } else {
+        _showSnack('已记一笔');
+      }
+    } catch (e) {
+      AppLog.instance.e('记一笔失败:$e');
       if (!mounted) return;
-      _showSnack(coin > 0 ? '已记一笔,记账打卡成功,金币 +$coin' : '已记一笔');
-    } else {
-      _showSnack('已记一笔');
+      _showSnack('保存失败,请重试');
     }
   }
 }

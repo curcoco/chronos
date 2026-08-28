@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/widgets/section_card.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/widgets/section_card.dart';
 
 /// 首页首次引导卡:离线功能开箱即用;联网功能(天气/AI 聊天/更新)需在
 /// 「系统设置 → API 配置」填写 key。关闭后不再出现(存本地标记)。
@@ -29,13 +29,13 @@ class HomeOnboardingCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '计划 / 金币 / 灵感 / 记账等全部功能离线可用,数据只存本机。',
+            '计划 / 金币 / 灵感 / 记账等离线可用,数据只存本机。',
             style:
                 TextStyle(fontSize: 13, height: 1.5, color: AppColors.textMain),
           ),
           const SizedBox(height: 6),
           Text(
-            '天气与 AI 聊天需联网:在「系统设置 → API 配置」填入你的 key 即可。',
+            '天气与 AI 聊天需联网,在「API 配置」填入 key。',
             style:
                 TextStyle(fontSize: 12, height: 1.5, color: AppColors.textSub),
           ),

@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
-import 'package:student_workbench/features/notes/models/note.dart';
-import 'package:student_workbench/features/notes/services/note_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/core/widgets/confirm_dialog.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/core/widgets/mood_badge.dart';
+import 'package:chronos/features/notes/models/note.dart';
+import 'package:chronos/features/notes/services/note_service.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/core/widgets/confirm_dialog.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/core/widgets/mood_badge.dart';
 
 /// 灵感速记记录详情页:正文 + 完整时间;右上角三点菜单(分享 / 收藏 / 删除)
 class NoteDetailPage extends StatefulWidget {
@@ -23,16 +24,38 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
   final NoteService _service = NoteService();
   late bool _fav = widget.note.favorite;
 
+  /// 菜单分发:各操作内部自带 try/catch(失败落日志 + 反馈),不再裸抛。
+  void _onMenu(String v) {
+    switch (v) {
+      case 'share':
+        _share();
+      case 'fav':
+        _toggleFavorite();
+      case 'delete':
+        _delete();
+    }
+  }
+
   Future<void> _share() async {
-    await Share.share(widget.note.content, subject: '灵感速记');
+    try {
+      await Share.share(widget.note.content, subject: '灵感速记');
+    } catch (e) {
+      AppLog.instance.e('分享失败:$e');
+    }
   }
 
   Future<void> _toggleFavorite() async {
-    final next = !_fav;
-    await _service.setFavorite(widget.note.id!, next);
-    if (!mounted) return;
-    setState(() => _fav = next);
-    showFrostedSnack(context, next ? '已收藏' : '已取消收藏');
+    try {
+      final next = !_fav;
+      await _service.setFavorite(widget.note.id!, next);
+      if (!mounted) return;
+      setState(() => _fav = next);
+      showFrostedSnack(context, next ? '已收藏' : '已取消收藏');
+    } catch (e) {
+      AppLog.instance.e('收藏切换失败:$e');
+      if (!mounted) return;
+      showFrostedSnack(context, '操作失败,请重试');
+    }
   }
 
   Future<void> _delete() async {
@@ -43,9 +66,15 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
       destructive: true,
     );
     if (!ok || !mounted) return;
-    await NoteService().deleteNote(widget.note.id!);
-    if (!mounted) return;
-    Navigator.of(context).pop();
+    try {
+      await NoteService().deleteNote(widget.note.id!);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (e) {
+      AppLog.instance.e('删除记录失败:$e');
+      if (!mounted) return;
+      showFrostedSnack(context, '删除失败,请重试');
+    }
   }
 
   @override
@@ -56,11 +85,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert_rounded),
-            onSelected: (v) {
-              if (v == 'share') _share();
-              if (v == 'fav') _toggleFavorite();
-              if (v == 'delete') _delete();
-            },
+            onSelected: _onMenu,
             itemBuilder: (context) => [
               const PopupMenuItem(
                 value: 'share',

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/theme.dart';
+import 'package:chronos/core/theme.dart';
 
 /// 首页天气条(点击选择城市;下拉刷新也会更新天气)。
 class HomeWeatherStrip extends StatelessWidget {

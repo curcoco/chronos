@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/data/wish_content.dart';
-import 'package:student_workbench/features/coins/models/coin_record.dart';
-import 'package:student_workbench/features/coins/models/wish.dart';
-import 'package:student_workbench/features/coins/services/coin_service.dart';
-import 'package:student_workbench/features/coins/services/wish_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/core/widgets/confirm_dialog.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
+import 'package:chronos/core/data/wish_content.dart';
+import 'package:chronos/features/coins/models/coin_record.dart';
+import 'package:chronos/features/coins/models/wish.dart';
+import 'package:chronos/features/coins/services/coin_service.dart';
+import 'package:chronos/features/coins/services/wish_service.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/widgets/confirm_dialog.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/core/widgets/status_views.dart';
 
 /// 金币中心:心愿清单兑换 + 收支历史
 class CoinCenterPage extends StatelessWidget {
@@ -51,6 +53,7 @@ class _WishTabState extends State<_WishTab> {
   final WishService _wishService = WishService();
 
   bool _loading = true;
+  String? _loadError; // 心愿/余额加载失败(渲染 ErrorView + 重试)
   List<Wish> _wishes = [];
   int _balance = 0;
   int _todayEarned = 0;
@@ -63,18 +66,28 @@ class _WishTabState extends State<_WishTab> {
 
   Future<void> _load() async {
     final date = todayStr();
-    final results = await Future.wait<Object>([
-      _wishService.wishes(),
-      CoinService.instance.balance(),
-      CoinService.instance.earnedToday(date),
-    ]);
-    if (!mounted) return;
-    setState(() {
-      _wishes = results[0] as List<Wish>;
-      _balance = results[1] as int;
-      _todayEarned = results[2] as int;
-      _loading = false;
-    });
+    try {
+      final results = await Future.wait<Object>([
+        _wishService.wishes(),
+        CoinService.instance.balance(),
+        CoinService.instance.earnedToday(date),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _wishes = results[0] as List<Wish>;
+        _balance = results[1] as int;
+        _todayEarned = results[2] as int;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      AppLog.instance.e('心愿/余额加载失败:$e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = '数据加载失败,请重试';
+      });
+    }
   }
 
   void _showSnack(String msg) {
@@ -132,8 +145,13 @@ class _WishTabState extends State<_WishTab> {
       _showSnack('请填写心愿名称和有效金币数');
       return;
     }
-    await _wishService.addWish(title: title, cost: cost);
-    await _load();
+    try {
+      await _wishService.addWish(title: title, cost: cost);
+      await _load();
+    } catch (e) {
+      AppLog.instance.e('添加心愿失败:$e');
+      _showSnack('添加失败,请重试');
+    }
   }
 
   /// 随机添加一个系统心愿(排除已许过的)
@@ -144,9 +162,14 @@ class _WishTabState extends State<_WishTab> {
       _showSnack('心愿池都许过啦,试试自定义添加');
       return;
     }
-    await _wishService.addWish(title: pick.title, cost: pick.cost);
-    await _load();
-    _showSnack('已添加随机心愿:${pick.title}');
+    try {
+      await _wishService.addWish(title: pick.title, cost: pick.cost);
+      await _load();
+      _showSnack('已添加随机心愿:${pick.title}');
+    } catch (e) {
+      AppLog.instance.e('添加随机心愿失败:$e');
+      _showSnack('添加失败,请重试');
+    }
   }
 
   Future<void> _redeem(Wish wish) async {
@@ -168,12 +191,17 @@ class _WishTabState extends State<_WishTab> {
       ),
     );
     if (confirm != true || !mounted) return;
-    final ok = await CoinService.instance.redeemWish(wish, todayStr());
-    await _load();
-    if (ok) {
-      _showSnack('兑换成功!');
-    } else {
-      _showSnack('金币不足,继续加油攒金币吧~');
+    try {
+      final ok = await CoinService.instance.redeemWish(wish, todayStr());
+      await _load();
+      if (ok) {
+        _showSnack('兑换成功!');
+      } else {
+        _showSnack('金币不足,继续加油攒金币吧~');
+      }
+    } catch (e) {
+      AppLog.instance.e('兑换心愿失败:$e');
+      _showSnack('兑换失败,请重试');
     }
   }
 
@@ -187,17 +215,45 @@ class _WishTabState extends State<_WishTab> {
       destructive: true,
     );
     if (!confirm || !mounted) return;
-    await _wishService.deleteWish(wish.id!);
-    await _load();
-    _showSnack('已删除心愿');
+    try {
+      await _wishService.deleteWish(wish.id!);
+      await _load();
+      if (!mounted) return;
+      showUndoSnack(
+        context,
+        '已删除心愿',
+        onUndo: () async {
+          try {
+            await _wishService.restore(wish);
+            await _load();
+          } catch (e) {
+            AppLog.instance.e('撤销删除心愿失败:$e');
+          }
+        },
+      );
+    } catch (e) {
+      AppLog.instance.e('删除心愿失败:$e');
+      _showSnack('删除失败,请重试');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return _loading
-        ? const Center(child: CircularProgressIndicator())
-        : ListView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+    return _loadError != null
+        ? ErrorView(
+            message: _loadError!,
+            onRetry: () {
+              setState(() {
+                _loadError = null;
+                _loading = true;
+              });
+              _load();
+            },
+          )
+        : _loading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
             children: [
               Container(
                 padding: const EdgeInsets.all(16),
@@ -205,27 +261,28 @@ class _WishTabState extends State<_WishTab> {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [AppColors.primaryLight, AppColors.primary],
+                    colors: [AppColors.primaryLight, AppColors.primarySoft],
                   ),
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.stars_rounded,
-                        color: Colors.white, size: 34),
+                    Icon(Icons.stars_rounded,
+                        color: AppColors.onPrimarySoft, size: 34),
                     const SizedBox(width: 12),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('当前金币余额',
+                        Text('当前金币余额',
                             style: TextStyle(
-                                fontSize: 12, color: Color(0xFFE3F4FF))),
+                                fontSize: 12,
+                                color: AppColors.onPrimarySoft)),
                         Text(
                           '$_balance 枚',
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.w800,
-                              color: Colors.white),
+                              color: AppColors.onPrimarySoft),
                         ),
                       ],
                     ),
@@ -378,6 +435,7 @@ class _RecordTab extends StatefulWidget {
 class _RecordTabState extends State<_RecordTab> {
   List<CoinRecord> _records = [];
   bool _loading = true;
+  String? _loadError; // 收支记录加载失败(渲染 ErrorView + 重试)
 
   @override
   void initState() {
@@ -386,19 +444,40 @@ class _RecordTabState extends State<_RecordTab> {
   }
 
   Future<void> _load() async {
-    final records = await CoinService.instance.records();
-    if (!mounted) return;
-    setState(() {
-      _records = records;
-      _loading = false;
-    });
+    try {
+      final records = await CoinService.instance.records();
+      if (!mounted) return;
+      setState(() {
+        _records = records;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      AppLog.instance.e('收支记录加载失败:$e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = '收支记录加载失败,请重试';
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return _loading
-        ? const Center(child: CircularProgressIndicator())
-        : _records.isEmpty
+    return _loadError != null
+        ? ErrorView(
+            message: _loadError!,
+            onRetry: () {
+              setState(() {
+                _loadError = null;
+                _loading = true;
+              });
+              _load();
+            },
+          )
+        : _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _records.isEmpty
             ? Center(
                 child: Text('还没有收支记录,快去完成今日任务吧~',
                     style: TextStyle(color: AppColors.textSub)),

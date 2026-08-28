@@ -7,8 +7,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
-import 'package:student_workbench/core/services/app_log.dart';
-import 'package:student_workbench/core/services/db_helper.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/services/db_helper.dart';
 
 /// 恢复结果:是否成功导入数据库、设置项条数。
 class RestoreResult {
@@ -64,6 +64,34 @@ class BackupService {
           ArchiveFile('app_log.txt', logBytes.length, logBytes));
     }
 
+    // 5) 图片类本地文件(头像 / 掌柜头像 / 背景图 / 聊天图片),换机迁移不丢图。
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      for (final name in [
+        'avatar.jpg', 'avatar.png',
+        'shopkeeper_avatar.jpg', 'shopkeeper_avatar.png',
+        'background.jpg', 'background.png',
+      ]) {
+        final f = File(p.join(docs.path, name));
+        if (await f.exists()) {
+          final bytes = await f.readAsBytes();
+          archive.addFile(ArchiveFile('media/$name', bytes.length, bytes));
+        }
+      }
+      // 聊天图片目录(闲话铺发图,随消息落库的本地文件)。
+      final chatImgs = Directory(p.join(docs.path, 'chat_imgs'));
+      if (await chatImgs.exists()) {
+        await for (final f in chatImgs.list()) {
+          if (f is! File) continue;
+          final bytes = await f.readAsBytes();
+          archive.addFile(ArchiveFile(
+              'media/chat_imgs/${p.basename(f.path)}', bytes.length, bytes));
+        }
+      }
+    } catch (_) {
+      // 图片打包失败不阻断导出(核心数据仍是数据库)。
+    }
+
     // 打包
     final encoded = ZipEncoder().encode(archive)!;
 
@@ -81,13 +109,66 @@ class BackupService {
       await backupDir.create(recursive: true);
     }
 
-    final now = DateTime.now();
-    String two(int v) => v.toString().padLeft(2, '0');
-    final stamp =
-        '${now.year}${two(now.month)}${two(now.day)}-${two(now.hour)}${two(now.minute)}${two(now.second)}';
+    final stamp = _stamp(DateTime.now());
     final outPath = p.join(backupDir.path, 'chronos-backup-$stamp.zip');
     final outFile = File(outPath);
     await outFile.writeAsBytes(encoded, flush: true);
+    return outPath;
+  }
+
+  static String _stamp(DateTime now) {
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${now.year}${two(now.month)}${two(now.day)}-'
+        '${two(now.hour)}${two(now.minute)}${two(now.second)}';
+  }
+
+  /// 导出「诊断包」:数据库 + 应用日志 + 设置项(不含密钥与媒体文件),
+  /// 用于问题复现排查(如「掌柜不回复」「日志为空」等)。
+  Future<String> exportDiagnosticZip() async {
+    final archive = Archive();
+
+    // 1) 数据库(全部业务数据,排除敏感项见 2)
+    final dbPath = p.join(await getDatabasesPath(), 'student_workbench.db');
+    final dbFile = File(dbPath);
+    if (await dbFile.exists()) {
+      final bytes = await dbFile.readAsBytes();
+      archive.addFile(ArchiveFile('student_workbench.db', bytes.length, bytes));
+    }
+
+    // 2) 应用日志(关键埋点,问题复现核心)
+    final logText = await AppLog.instance.exportText();
+    if (logText.isNotEmpty) {
+      final logBytes = utf8.encode(logText);
+      archive.addFile(ArchiveFile('app_log.txt', logBytes.length, logBytes));
+    }
+
+    // 3) 设置项(排除 api_ 前缀密钥)
+    final prefs = await SharedPreferences.getInstance();
+    final map = <String, Object?>{};
+    for (final key in prefs.getKeys()) {
+      if (key.startsWith('api_')) continue;
+      map[key] = prefs.get(key);
+    }
+    final prefsJson = const JsonEncoder.withIndent('  ').convert(map);
+    final prefsBytes = utf8.encode(prefsJson);
+    archive.addFile(
+        ArchiveFile('preferences.json', prefsBytes.length, prefsBytes));
+
+    final encoded = ZipEncoder().encode(archive)!;
+
+    Directory outDir;
+    try {
+      outDir = await getApplicationDocumentsDirectory();
+      final ext = await getExternalStorageDirectory();
+      if (ext != null) outDir = ext;
+    } catch (_) {
+      outDir = await getApplicationDocumentsDirectory();
+    }
+    final diagDir = Directory(p.join(outDir.path, 'ChronosBackups'));
+    if (!await diagDir.exists()) await diagDir.create(recursive: true);
+    final outPath =
+        p.join(diagDir.path, 'chronos-diagnostic-${_stamp(DateTime.now())}.zip');
+    await File(outPath).writeAsBytes(encoded, flush: true);
     return outPath;
   }
 
@@ -132,6 +213,30 @@ class BackupService {
     } catch (_) {}
 
     final dbBytes = dbEntry.content as List<int>;
+    // 恢复前校验备份库版本:备份来自**更新**版本的 App 时禁止降级恢复
+    // (旧 App 打开新库会因版本过高抛错,数据库打不开、页面连锁失败)。
+    final probePath = '$dbPath.restore-probe';
+    await File(probePath).writeAsBytes(dbBytes, flush: true);
+    int? backupVersion;
+    try {
+      final probe = await openDatabase(probePath, readOnly: true);
+      backupVersion = await probe.getVersion();
+      await probe.close();
+    } catch (_) {
+      // 备份库损坏/非 sqlite:交给后续 openDatabase 自然失败,这里不阻断。
+    } finally {
+      final f = File(probePath);
+      if (await f.exists()) {
+        try {
+          await f.delete();
+        } catch (_) {}
+      }
+    }
+    if (backupVersion != null && backupVersion > DbHelper.dbVersion) {
+      throw FormatException(
+          '备份来自更新的版本(数据库 v$backupVersion,当前 App 为 v${DbHelper.dbVersion}),'
+          '请先升级 App 再恢复');
+    }
     await File(dbPath).writeAsBytes(dbBytes, flush: true);
 
     // 2) 恢复设置项(跳过 api_ 前缀,避免覆盖本机已填密钥)。
@@ -168,7 +273,29 @@ class BackupService {
       }
     }
 
-    // 3) 触发数据库重开(应用新版本号 / 必要时迁移)。
+    // 3) 媒体文件(头像 / 掌柜头像 / 背景图 / 聊天图片)写回文档目录,
+    //    保证 prefs 里的图片路径与聊天消息里的图片路径恢复后能找到对应文件。
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      for (final f in archive.files) {
+        if (!f.isFile) continue;
+        if (!f.name.startsWith('media/')) continue;
+        final bytes = f.content as List<int>;
+        if (f.name.startsWith('media/chat_imgs/')) {
+          final dir = Directory(p.join(docs.path, 'chat_imgs'));
+          if (!await dir.exists()) await dir.create(recursive: true);
+          await File(p.join(dir.path, p.basename(f.name)))
+              .writeAsBytes(bytes, flush: true);
+        } else {
+          await File(p.join(docs.path, p.basename(f.name)))
+              .writeAsBytes(bytes, flush: true);
+        }
+      }
+    } catch (_) {
+      // 媒体恢复失败不阻断(数据库与设置已恢复)。
+    }
+
+    // 4) 触发数据库重开(应用新版本号 / 必要时迁移)。
     await DbHelper.instance.database;
 
     return RestoreResult(dbRestored: true, prefsRestored: prefsCount);

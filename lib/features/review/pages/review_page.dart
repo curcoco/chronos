@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/features/review/models/review.dart';
-import 'package:student_workbench/features/review/services/review_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/core/widgets/section_card.dart';
+import 'package:chronos/features/review/models/review.dart';
+import 'package:chronos/features/review/services/review_service.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/core/widgets/section_card.dart';
+import 'package:chronos/core/widgets/status_views.dart';
 
 /// 每日复盘:今日完成进度 / 问题卡点 / 明日方案 + 历史复盘列表
 class ReviewPage extends StatefulWidget {
@@ -22,6 +24,7 @@ class _ReviewPageState extends State<ReviewPage> {
   final TextEditingController _planCtrl = TextEditingController();
 
   bool _loading = true;
+  String? _loadError; // 复盘加载失败(渲染 ErrorView + 重试)
   List<Review> _reviews = [];
   int _progress = 100;
 
@@ -43,18 +46,28 @@ class _ReviewPageState extends State<ReviewPage> {
   }
 
   Future<void> _init() async {
-    final results =
-        await Future.wait([_service.all(), _service.reviewFor(todayStr())]);
-    if (!mounted) return;
-    final today = results[1] as Review?;
-    _doneCtrl.text = today?.done ?? '';
-    _problemCtrl.text = today?.problem ?? '';
-    _planCtrl.text = today?.plan ?? '';
-    setState(() {
-      _reviews = results[0] as List<Review>;
-      _progress = today?.progress ?? 100;
-      _loading = false;
-    });
+    try {
+      final results =
+          await Future.wait([_service.all(), _service.reviewFor(todayStr())]);
+      if (!mounted) return;
+      final today = results[1] as Review?;
+      _doneCtrl.text = today?.done ?? '';
+      _problemCtrl.text = today?.problem ?? '';
+      _planCtrl.text = today?.plan ?? '';
+      setState(() {
+        _reviews = results[0] as List<Review>;
+        _progress = today?.progress ?? 100;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      AppLog.instance.e('复盘加载失败:$e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = '复盘数据加载失败,请重试';
+      });
+    }
   }
 
   Future<void> _save() async {
@@ -65,10 +78,15 @@ class _ReviewPageState extends State<ReviewPage> {
       _showSnack('写点什么再保存吧');
       return;
     }
-    await _service.save(todayStr(),
-        progress: _progress, done: done, problem: problem, plan: plan);
-    await _init();
-    _showSnack('已保存今日复盘');
+    try {
+      await _service.save(todayStr(),
+          progress: _progress, done: done, problem: problem, plan: plan);
+      await _init();
+      _showSnack('已保存今日复盘');
+    } catch (e) {
+      AppLog.instance.e('复盘保存失败:$e');
+      _showSnack('保存失败,请重试');
+    }
   }
 
   void _showSnack(String msg) {
@@ -80,9 +98,20 @@ class _ReviewPageState extends State<ReviewPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('每日复盘')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
+      body: _loadError != null
+          ? ErrorView(
+              message: _loadError!,
+              onRetry: () {
+                setState(() {
+                  _loadError = null;
+                  _loading = true;
+                });
+                _init();
+              },
+            )
+          : _loading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
               children: [
                 SectionCard(

@@ -22,8 +22,14 @@ class AppTextField extends StatelessWidget {
   final InputBorder? border;
   final TextStyle? style;
 
+  /// 密码/密钥输入(掩码显示)。
+  final bool obscureText;
+
   /// 「回车/完成」时触发。为 null 时不启用提交语义。
   final VoidCallback? onSubmit;
+
+  /// 提交是否被锁定(如提交中防重):锁定时回车/完成键不触发 [onSubmit]。
+  final bool submitLocked;
 
   /// 文本变化回调(在换行兜底处理之后回传纯文本)。
   final ValueChanged<String>? onChanged;
@@ -43,14 +49,19 @@ class AppTextField extends StatelessWidget {
     this.showCounter = false,
     this.border,
     this.style,
+    this.obscureText = false,
     this.onSubmit,
+    this.submitLocked = false,
     this.onChanged,
     this.submitOnEnter = true,
   });
 
   void _handleChanged(String value) {
     // 兜底:侦测到结尾换行 → 视为「完成」,剥掉换行并提交。
-    if (submitOnEnter && onSubmit != null && value.endsWith('\n')) {
+    if (submitOnEnter &&
+        onSubmit != null &&
+        !submitLocked &&
+        value.endsWith('\n')) {
       final cleaned = value.substring(0, value.length - 1);
       if (controller.text != cleaned) {
         controller.text = cleaned;
@@ -71,6 +82,7 @@ class AppTextField extends StatelessWidget {
       controller: controller,
       focusNode: focusNode,
       autofocus: autofocus,
+      obscureText: obscureText,
       minLines: minLines,
       maxLines: maxLines,
       maxLength: maxLength,
@@ -79,7 +91,9 @@ class AppTextField extends StatelessWidget {
       textInputAction:
           enableSubmit ? TextInputAction.done : TextInputAction.newline,
       onChanged: _handleChanged,
-      onSubmitted: enableSubmit ? (_) => onSubmit!.call() : null,
+      onSubmitted: enableSubmit && !submitLocked
+          ? (_) => onSubmit!.call()
+          : null,
       style: style,
       decoration: InputDecoration(
         hintText: hintText,

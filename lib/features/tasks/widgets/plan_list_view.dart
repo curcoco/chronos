@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 
-import 'package:student_workbench/core/data/daily_content.dart';
-import 'package:student_workbench/features/tasks/models/plan_item.dart';
-import 'package:student_workbench/features/tasks/services/plan_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/core/widgets/section_card.dart';
+import 'package:chronos/core/data/daily_content.dart';
+import 'package:chronos/features/tasks/models/plan_item.dart';
+import 'package:chronos/features/tasks/services/plan_service.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/core/widgets/section_card.dart';
 
 /// 计划清单视图:本周计划 / 长期目标共用(scope 区分)。
 /// 支持新增、勾选完成、编辑、删除;空态有引导文案。

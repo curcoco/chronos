@@ -9,17 +9,22 @@ class AppRoutes {
 
   /// 推入新页面,返回页面 pop 时的结果(可 await)。
   /// [dialog] 为 true 时以全屏对话框形式打开(如灵感速记)。
+  /// 普通跳转统一用「淡入 + 轻微上滑」过渡(见 [_FadeSlideRoute]):
+  /// 切换页面不再生硬,下层路由(主框架与全局背景图)在过渡期间保持可见。
   static Future<T?> push<T>(
     BuildContext context,
     Widget page, {
     bool dialog = false,
   }) {
-    return Navigator.of(context).push<T>(
-      MaterialPageRoute<T>(
-        builder: (_) => page,
-        fullscreenDialog: dialog,
-      ),
-    );
+    if (dialog) {
+      return Navigator.of(context).push<T>(
+        MaterialPageRoute<T>(
+          builder: (_) => page,
+          fullscreenDialog: true,
+        ),
+      );
+    }
+    return Navigator.of(context).push<T>(_FadeSlideRoute<T>(page));
   }
 
   /// 用新页面替换当前页面(不保留返回栈)。
@@ -42,4 +47,33 @@ class AppRoutes {
       (route) => false,
     );
   }
+}
+
+/// 「淡入 + 轻微上滑」页面过渡:页面从下层缓缓浮现,
+/// 下层内容与全局背景图在过渡中保持可见,不闪黑、不生硬。
+class _FadeSlideRoute<T> extends PageRouteBuilder<T> {
+  _FadeSlideRoute(Widget page)
+      : super(
+          pageBuilder: (context, animation, secondaryAnimation) => page,
+          transitionDuration: const Duration(milliseconds: 260),
+          reverseTransitionDuration: const Duration(milliseconds: 200),
+          transitionsBuilder:
+              (context, animation, secondaryAnimation, child) {
+            final curved = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+              reverseCurve: Curves.easeInCubic,
+            );
+            return FadeTransition(
+              opacity: curved,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, 0.03),
+                  end: Offset.zero,
+                ).animate(curved),
+                child: child,
+              ),
+            );
+          },
+        );
 }

@@ -17,7 +17,7 @@ if (hasReleaseKeystore) {
 }
 
 android {
-    namespace = "com.student.student_workbench"
+    namespace = "com.chronos.workbench"
     // file_picker 的传递依赖 flutter_plugin_android_lifecycle 要求 compileSdk>=36。
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
@@ -25,10 +25,12 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications 需要 core library desugaring。
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
-        applicationId = "com.student.student_workbench"
+        applicationId = "com.chronos.workbench"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -80,6 +82,11 @@ kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
+}
+
+dependencies {
+    // flutter_local_notifications 的 java.time 支持依赖 core library desugaring。
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 flutter {

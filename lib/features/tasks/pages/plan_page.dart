@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/features/tasks/models/plan_item.dart';
-import 'package:student_workbench/features/tasks/models/student_task.dart';
-import 'package:student_workbench/features/tasks/services/task_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/features/tasks/widgets/add_task_sheet.dart';
-import 'package:student_workbench/core/widgets/confirm_dialog.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/features/tasks/widgets/plan_list_view.dart';
-import 'package:student_workbench/features/tasks/widgets/random_task_sheet.dart';
-import 'package:student_workbench/core/widgets/section_card.dart';
-import 'package:student_workbench/features/tasks/widgets/task_confirm_dialog.dart';
+import 'package:chronos/features/tasks/models/plan_item.dart';
+import 'package:chronos/features/tasks/models/student_task.dart';
+import 'package:chronos/features/tasks/services/task_service.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/features/tasks/widgets/add_task_sheet.dart';
+import 'package:chronos/core/widgets/confirm_dialog.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/features/tasks/widgets/plan_list_view.dart';
+import 'package:chronos/features/tasks/widgets/random_task_sheet.dart';
+import 'package:chronos/core/widgets/section_card.dart';
+import 'package:chronos/core/widgets/status_views.dart';
+import 'package:chronos/features/tasks/widgets/task_confirm_dialog.dart';
 
 /// 每日计划任务中心:今日清单 + 本周计划 + 长期目标(均可交互)
 class PlanPage extends StatefulWidget {
@@ -25,6 +27,7 @@ class _PlanPageState extends State<PlanPage> {
   final TaskService _taskService = TaskService();
 
   bool _loading = true;
+  String? _loadError; // 今日任务加载失败(渲染 ErrorView + 重试)
   List<StudentTask> _tasks = [];
 
   int get _doneCount => _tasks.where((t) => t.done).length;
@@ -36,12 +39,22 @@ class _PlanPageState extends State<PlanPage> {
   }
 
   Future<void> _load() async {
-    final tasks = await _taskService.todayTasks(todayStr());
-    if (!mounted) return;
-    setState(() {
-      _tasks = tasks;
-      _loading = false;
-    });
+    try {
+      final tasks = await _taskService.todayTasks(todayStr());
+      if (!mounted) return;
+      setState(() {
+        _tasks = tasks;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      AppLog.instance.e('今日任务加载失败:$e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = '任务加载失败,请重试';
+      });
+    }
   }
 
   void _showSnack(String msg) {
@@ -60,13 +73,18 @@ class _PlanPageState extends State<PlanPage> {
       builder: (_) => const AddTaskSheet(),
     );
     if (result == null || !mounted) return;
-    await _taskService.addTask(
-      title: result.title,
-      category: result.category,
-      priority: result.priority,
-      date: todayStr(),
-    );
-    await _load();
+    try {
+      await _taskService.addTask(
+        title: result.title,
+        category: result.category,
+        priority: result.priority,
+        date: todayStr(),
+      );
+      await _load();
+    } catch (e) {
+      AppLog.instance.e('添加任务失败:$e');
+      _showSnack('添加失败,请重试');
+    }
   }
 
   /// 随机任务:新增一条,不影响手动添加流程与每日自动生成的 3 条
@@ -82,26 +100,36 @@ class _PlanPageState extends State<PlanPage> {
           RandomTaskSheet(excludeTitles: _tasks.map((t) => t.title).toSet()),
     );
     if (result == null || !mounted) return;
-    await _taskService.addTask(
-      title: result.title,
-      category: result.category,
-      priority: result.priority,
-      date: todayStr(),
-      auto: true,
-    );
-    await _load();
-    _showSnack('已添加随机任务');
+    try {
+      await _taskService.addTask(
+        title: result.title,
+        category: result.category,
+        priority: result.priority,
+        date: todayStr(),
+        auto: true,
+      );
+      await _load();
+      _showSnack('已添加随机任务');
+    } catch (e) {
+      AppLog.instance.e('添加随机任务失败:$e');
+      _showSnack('添加失败,请重试');
+    }
   }
 
   Future<void> _toggleTask(StudentTask task) async {
     final ok = await confirmTaskToggle(context, task, todayStr());
     if (!ok || !mounted) return;
-    final r = await _taskService.toggleTask(task, todayStr());
-    await _load();
-    if (r.total != 0) {
-      _showSnack(r.total > 0
-          ? '金币 +${r.total}${r.bonus > 0 ? '(含全部完成奖励)' : ''}'
-          : '已收回金币 ${-r.total}');
+    try {
+      final r = await _taskService.toggleTask(task, todayStr());
+      await _load();
+      if (r.total != 0) {
+        _showSnack(r.total > 0
+            ? '金币 +${r.total}${r.bonus > 0 ? '(含全部完成奖励)' : ''}'
+            : '已收回金币 ${-r.total}');
+      }
+    } catch (e) {
+      AppLog.instance.e('任务状态切换失败:$e');
+      _showSnack('操作失败,请重试');
     }
   }
 
@@ -116,9 +144,14 @@ class _PlanPageState extends State<PlanPage> {
       destructive: true,
     );
     if (!ok || !mounted) return;
-    await _taskService.deleteTask(task.id!);
-    await _load();
-    _showSnack('已取消该任务');
+    try {
+      await _taskService.deleteTask(task.id!);
+      await _load();
+      _showSnack('已取消该任务');
+    } catch (e) {
+      AppLog.instance.e('取消任务失败:$e');
+      _showSnack('操作失败,请重试');
+    }
   }
 
   @override
@@ -163,9 +196,20 @@ class _PlanPageState extends State<PlanPage> {
                     ],
                   ),
                   Expanded(
-                    child: _loading
-                        ? const Center(child: CircularProgressIndicator())
-                        : TabBarView(
+                    child: _loadError != null
+                        ? ErrorView(
+                            message: _loadError!,
+                            onRetry: () {
+                              setState(() {
+                                _loadError = null;
+                                _loading = true;
+                              });
+                              _load();
+                            },
+                          )
+                        : _loading
+                            ? const Center(child: CircularProgressIndicator())
+                            : TabBarView(
                             children: [
                               _buildTodayList(),
                               const PlanListView(

@@ -1,11 +1,12 @@
-import 'package:student_workbench/features/chat/tools/chat_tool.dart';
-import 'package:student_workbench/features/coins/services/coin_service.dart';
-import 'package:student_workbench/features/coins/services/wish_service.dart';
-import 'package:student_workbench/features/ledger/services/ledger_service.dart';
-import 'package:student_workbench/features/notes/services/note_service.dart';
-import 'package:student_workbench/features/tasks/services/task_service.dart';
-import 'package:student_workbench/core/services/weather_service.dart';
-import 'package:student_workbench/core/utils/dates.dart';
+import 'package:chronos/features/chat/tools/chat_tool.dart';
+import 'package:chronos/features/chat/services/tavily_service.dart';
+import 'package:chronos/features/coins/services/coin_service.dart';
+import 'package:chronos/features/coins/services/wish_service.dart';
+import 'package:chronos/features/ledger/services/ledger_service.dart';
+import 'package:chronos/features/notes/services/note_service.dart';
+import 'package:chronos/features/tasks/services/task_service.dart';
+import 'package:chronos/core/services/weather_service.dart';
+import 'package:chronos/core/utils/dates.dart';
 
 /// 工具注册表:集中管理闲话铺可用工具(定义 + 执行器)。
 ///
@@ -144,6 +145,32 @@ class ToolRegistry {
             return notes.take(5).map((n) => n.content).join('\n');
           },
         ),
+        ChatTool(
+          name: 'web_search',
+          definition: {
+            'type': 'function',
+            'function': {
+              'name': 'web_search',
+              'description': '联网搜索公开信息(默认 Tavily 搜索服务),返回最相关的几条结果。'
+                  '用于回答需要最新/外部信息的问题',
+              'parameters': {
+                'type': 'object',
+                'properties': {
+                  'query': {
+                    'type': 'string',
+                    'description': '搜索关键词,尽量具体',
+                  },
+                },
+                'required': ['query'],
+              },
+            },
+          },
+          execute: (args) async {
+            final query = (args['query'] as String?)?.trim() ?? '';
+            if (query.isEmpty) return '缺少搜索关键词';
+            return TavilyService.instance.search(query);
+          },
+        ),
         // ---------- 写操作(需用户确认) ----------
         ChatTool(
           name: 'add_ledger',
@@ -186,7 +213,8 @@ class ToolRegistry {
             final amount = (args['amount'] as num?)?.toDouble() ?? 0;
             final category = (args['category'] as String?) ?? '其他';
             final note = (args['note'] as String?)?.trim() ?? '';
-            if (amount <= 0) return '金额无效';
+            // 防 NaN:NaN 的 `<= 0` 为 false,必须显式判 isFinite。
+            if (!amount.isFinite || amount <= 0) return '金额无效';
             await LedgerService().addTxn(
               type: type,
               amount: amount,

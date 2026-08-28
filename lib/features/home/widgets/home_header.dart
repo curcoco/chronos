@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/theme.dart';
+import 'package:chronos/core/theme.dart';
 
 /// 首页头部:日期 + 星期 + 金句 + 用户头像(点击开侧边栏)。
 /// [avatarPath] 非空时显示头像图片,否则显示昵称首字。

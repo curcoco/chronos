@@ -1,7 +1,7 @@
 /// 记账模块共享的格式化与聚合小工具(供明细/日历/图表 Tab 复用)。
 library;
 
-import 'package:student_workbench/features/ledger/models/ledger_txn.dart';
+import 'package:chronos/features/ledger/models/ledger_txn.dart';
 
 String money(double v) => '¥${v.toStringAsFixed(2)}';
 

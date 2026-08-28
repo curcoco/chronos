@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/theme.dart';
+import 'package:chronos/core/theme.dart';
 
 /// 通用卡片容器:标题行 + 内容
 class SectionCard extends StatelessWidget {

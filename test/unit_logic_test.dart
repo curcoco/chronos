@@ -1,14 +1,72 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:student_workbench/core/services/app_info.dart';
-import 'package:student_workbench/features/coins/services/coin_service.dart';
-import 'package:student_workbench/features/tasks/services/task_service.dart';
-import 'package:student_workbench/features/tasks/models/student_task.dart';
-import 'package:student_workbench/core/data/daily_content.dart';
-import 'package:student_workbench/core/data/content_store.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/features/chat/tools/tool_registry.dart';
+import 'package:chronos/main.dart';
+import 'package:chronos/core/services/ai_provider.dart';
+import 'package:chronos/core/services/app_info.dart';
+import 'package:chronos/core/utils/context_budget.dart';
+import 'package:chronos/features/coins/services/coin_service.dart';
+import 'package:chronos/features/tasks/services/task_service.dart';
+import 'package:chronos/features/tasks/models/student_task.dart';
+import 'package:chronos/core/data/daily_content.dart';
+import 'package:chronos/core/data/content_store.dart';
+import 'package:chronos/core/data/content_updater.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/features/chat/tools/tool_registry.dart';
+import 'package:chronos/features/chat/services/llm_service.dart';
 
 void main() {
+  group('ModelRef 模型引用解析', () {
+    test('合法引用解析出提供商与模型', () {
+      final r = ModelRef.parse('default|deepseek-chat');
+      expect(r?.providerId, 'default');
+      expect(r?.modelId, 'deepseek-chat');
+    });
+
+    test('空 / 格式错误返回 null', () {
+      expect(ModelRef.parse(null), isNull);
+      expect(ModelRef.parse(''), isNull);
+      expect(ModelRef.parse('nodivider'), isNull);
+      expect(ModelRef.parse('|model'), isNull);
+      expect(ModelRef.parse('provider|'), isNull);
+    });
+
+    test('ref 拼接往返一致(模型 id 可含 / 等字符)', () {
+      const r = ModelRef('p1', 'm/1');
+      expect(r.ref, 'p1|m/1');
+      expect(ModelRef.parse(r.ref)?.modelId, 'm/1');
+    });
+  });
+
+  group('stepTextScale 全局字号阶梯缩放', () {
+    test('最小字号(≤13)保持不变', () {
+      expect(stepTextScale(9), 9);
+      expect(stepTextScale(10), 10);
+      expect(stepTextScale(11), 11);
+      expect(stepTextScale(12), 12);
+      expect(stepTextScale(13), 13);
+    });
+
+    test('正文(14~17)整体略小', () {
+      expect(stepTextScale(14), closeTo(13.58, 0.01));
+      expect(stepTextScale(15), closeTo(14.1, 0.01));
+      expect(stepTextScale(16), closeTo(14.56, 0.01));
+      expect(stepTextScale(17), closeTo(14.96, 0.01));
+    });
+
+    test('大号(≥18)明显调小 ×0.85', () {
+      expect(stepTextScale(18), closeTo(15.3, 0.01));
+      expect(stepTextScale(24), closeTo(20.4, 0.01));
+      expect(stepTextScale(36), closeTo(30.6, 0.01));
+      expect(stepTextScale(46), closeTo(39.1, 0.01));
+    });
+
+    test('全区间单调:不会「大字比小字还小」', () {
+      for (var i = 9; i <= 60; i++) {
+        expect(stepTextScale((i + 1).toDouble()),
+            greaterThanOrEqualTo(stepTextScale(i.toDouble())));
+      }
+    });
+  });
+
   group('AppInfo.compareVersions 版本比较', () {
     test('相等返回 0', () {
       expect(AppInfo.compareVersions('1.6.1', '1.6.1'), 0);
@@ -292,6 +350,104 @@ void main() {
       ContentStore.quotes = ['远程金句一'];
       expect(DailyContent.quotePool, isNot(equals(DailyContent.quotes)));
       expect(DailyContent.quotePool.single, '远程金句一');
+    });
+  });
+
+  group('ContextBudget 上下文「条数 + token」双约束', () {
+    ({String role, String content, String? reasoningContent}) msg(String c) =>
+        (role: 'user', content: c, reasoningContent: null);
+
+    test('条数上限生效(短消息按条数截)', () {
+      final list = [for (var i = 0; i < 100; i++) msg('你好')];
+      // token 预算充足,按条数上限截。
+      expect(
+        ContextBudget.keepCount(list, maxCount: 80, budget: 100000),
+        80,
+      );
+    });
+
+    test('token 预算生效(长消息保留更少)', () {
+      final list = [for (var i = 0; i < 50; i++) msg('长' * 500)]; // 每条约 421 token
+      final kept = ContextBudget.keepCount(list, maxCount: 800, budget: 2000);
+      // 2000 / 421 ≈ 4.7 → 只保留最后 4 条,而不是 50 条。
+      expect(kept, 4);
+    });
+
+    test('至少保留最后一条(单条超预算也不为空)', () {
+      final list = [msg('超长' * 10000), msg('你好')];
+      expect(ContextBudget.keepCount(list, maxCount: 800, budget: 100), 1);
+    });
+
+    test('空列表返回 0', () {
+      expect(ContextBudget.keepCount(const [], maxCount: 80, budget: 1000), 0);
+    });
+
+    test('模型档位:1M 上下文 → 预算 100 万、预警 80 万', () {
+      expect(ContextBudget.budgetFor(true), 1000000);
+      expect(ContextBudget.warnThresholdFor(true), 800000);
+      expect(ContextBudget.budgetFor(false), 200000);
+      expect(ContextBudget.warnThresholdFor(false), 167000);
+    });
+
+    test('预警线低于预算,预留压缩余量', () {
+      expect(ContextBudget.warnThresholdFor(true),
+          lessThan(ContextBudget.budgetFor(true)));
+      expect(ContextBudget.warnThresholdFor(false),
+          lessThan(ContextBudget.budgetFor(false)));
+    });
+  });
+
+  group('LlmService 中转站端点兼容(修复「配置正确但回复为空」)', () {    test('根地址自动补全 /chat/completions', () {
+      expect(
+        LlmService.endpointFor('https://api.example.com/v1'),
+        'https://api.example.com/v1/chat/completions',
+      );
+      // 末尾带斜杠也不重复拼。
+      expect(
+        LlmService.endpointFor('https://api.example.com/v1/'),
+        'https://api.example.com/v1/chat/completions',
+      );
+    });
+
+    test('已带完整端点的地址不重复拼接', () {
+      expect(
+        LlmService.endpointFor('https://api.example.com/v1/chat/completions'),
+        'https://api.example.com/v1/chat/completions',
+      );
+    });
+
+    test('http 明文中转站地址同样支持', () {
+      expect(
+        LlmService.endpointFor('http://120.76.230.67:18011/v1'),
+        'http://120.76.230.67:18011/v1/chat/completions',
+      );
+    });
+  });
+
+  group('ContentUpdater 内容热更地址推导(兼容非 latest.json 更新源)', () {
+    test('latest.json 结尾 → 同目录 content.json', () {
+      expect(
+        ContentUpdater.contentUrlFor('http://120.76.230.67:18011/latest.json'),
+        'http://120.76.230.67:18011/content.json',
+      );
+    });
+
+    test('目录形态更新源 → 末尾补 /content.json', () {
+      expect(
+        ContentUpdater.contentUrlFor('http://host:8080/updates'),
+        'http://host:8080/updates/content.json',
+      );
+      expect(
+        ContentUpdater.contentUrlFor('http://host:8080/updates/'),
+        'http://host:8080/updates/content.json',
+      );
+    });
+
+    test('已带 content.json 不重复拼接', () {
+      expect(
+        ContentUpdater.contentUrlFor('http://host/x/content.json'),
+        'http://host/x/content.json',
+      );
     });
   });
 }

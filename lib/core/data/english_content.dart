@@ -1,7 +1,7 @@
 import 'dart:math';
 
-import 'package:student_workbench/core/data/content_store.dart';
-import 'package:student_workbench/core/utils/dates.dart';
+import 'package:chronos/core/data/content_store.dart';
+import 'package:chronos/core/utils/dates.dart';
 
 /// 英文积累内容池:每日单词 / 每日阅读 / 每日写作提示(全部离线内置,按日期确定性选取)
 class EnglishContent {

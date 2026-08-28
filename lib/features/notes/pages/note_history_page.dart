@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/features/notes/models/note.dart';
-import 'package:student_workbench/routes.dart';
-import 'package:student_workbench/features/notes/services/note_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/core/widgets/confirm_dialog.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/core/widgets/mood_badge.dart';
-import 'package:student_workbench/features/notes/pages/note_detail_page.dart';
+import 'package:chronos/features/notes/models/note.dart';
+import 'package:chronos/routes.dart';
+import 'package:chronos/features/notes/services/note_service.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/core/widgets/confirm_dialog.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/core/widgets/mood_badge.dart';
+import 'package:chronos/core/widgets/status_views.dart';
+import 'package:chronos/features/notes/pages/note_detail_page.dart';
 
 enum _Range { all, today, yesterday, week7, month30 }
 
@@ -26,6 +28,7 @@ class _NoteHistoryPageState extends State<NoteHistoryPage> {
 
   List<Note> _all = [];
   bool _loading = true;
+  String? _loadError; // 记录加载失败(渲染 ErrorView + 重试)
   String _kw = '';
   _Range _range = _Range.all;
   String _from = '';
@@ -45,12 +48,22 @@ class _NoteHistoryPageState extends State<NoteHistoryPage> {
   }
 
   Future<void> _load() async {
-    final notes = await _noteService.notes();
-    if (!mounted) return;
-    setState(() {
-      _all = notes;
-      _loading = false;
-    });
+    try {
+      final notes = await _noteService.notes();
+      if (!mounted) return;
+      setState(() {
+        _all = notes;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      AppLog.instance.e('速记记录加载失败:$e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = '记录加载失败,请重试';
+      });
+    }
   }
 
   bool get _hasFilter =>
@@ -191,20 +204,31 @@ class _NoteHistoryPageState extends State<NoteHistoryPage> {
     // 记住被删记录用于撤销
     final removed =
         _all.where((n) => _selected.contains(n.id)).toList();
-    await _noteService.deleteNotes(_selected.toList());
-    _cancelSelect();
-    await _load();
-    if (!mounted) return;
-    showUndoSnack(
-      context,
-      '已删除 $count 条记录',
-      onUndo: () async {
-        for (final n in removed) {
-          await _noteService.restore(n);
-        }
-        await _load();
-      },
-    );
+    try {
+      await _noteService.deleteNotes(_selected.toList());
+      _cancelSelect();
+      await _load();
+      if (!mounted) return;
+      showUndoSnack(
+        context,
+        '已删除 $count 条',
+        onUndo: () async {
+          try {
+            for (final n in removed) {
+              await _noteService.restore(n);
+            }
+            await _load();
+          } catch (e) {
+            AppLog.instance.e('撤销批量删除失败:$e');
+          }
+        },
+      );
+    } catch (e) {
+      AppLog.instance.e('批量删除失败:$e');
+      await _load();
+      if (!mounted) return;
+      _showSnack('删除失败,请重试');
+    }
   }
 
   @override
@@ -329,18 +353,29 @@ class _NoteHistoryPageState extends State<NoteHistoryPage> {
               ),
             const SizedBox(height: 8),
             const Divider(height: 1),
-            // 记录列表
+            // 记录列表(时间轴:由新到旧,色点 + 竖线,时间在上、内容在下)
             Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : filtered.isEmpty
-                      ? _buildEmpty()
-                      : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                          itemCount: filtered.length,
-                          itemBuilder: (context, i) =>
-                              _noteTile(filtered[i]),
-                        ),
+              child: _loadError != null
+                  ? ErrorView(
+                      message: _loadError!,
+                      onRetry: () {
+                        setState(() {
+                          _loadError = null;
+                          _loading = true;
+                        });
+                        _load();
+                      },
+                    )
+                  : _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : filtered.isEmpty
+                          ? _buildEmpty()
+                          : ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(16, 4, 20, 24),
+                              itemCount: filtered.length,
+                              itemBuilder: (context, i) => _noteTile(filtered[i],
+                                  isLast: i == filtered.length - 1),
+                            ),
             ),
           ],
         ),
@@ -413,80 +448,148 @@ class _NoteHistoryPageState extends State<NoteHistoryPage> {
     );
   }
 
-  Widget _noteTile(Note note) {
+  /// 时间轴色点池:浅色为主,按记录 id 稳定取色(同一记录颜色不变)。
+  static const List<Color> _dotColors = [
+    Color(0xFFB3E5FC), // 浅蓝
+    Color(0xFFF8BBD0), // 浅粉
+    Color(0xFFC8E6C9), // 浅绿
+    Color(0xFFFFF9C4), // 浅黄
+    Color(0xFFE1BEE7), // 浅紫
+    Color(0xFFFFE0B2), // 浅橙
+    Color(0xFFB2DFDB), // 浅青
+    Color(0xFFD7CCC8), // 浅灰
+  ];
+
+  Color _dotColor(Note note) =>
+      _dotColors[(note.id ?? note.createdAt) % _dotColors.length];
+
+  /// 时间轴节点:左侧色点 + 竖向连接线;右侧时间(上)+ 内容卡片(下)。
+  /// 选择(编辑)模式下,色点位置变成勾选框。
+  Widget _noteTile(Note note, {required bool isLast}) {
     final selected = _selected.contains(note.id);
-    return InkWell(
-      onTap: () => _openDetail(note),
-      onLongPress: () {
-        if (_selecting) {
-          _toggleSelect(note);
-        } else {
-          _enterSelect(note);
-        }
-      },
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.primaryLight.withValues(alpha: 0.35)
-              : null,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        padding:
-            const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (_selecting) ...[
-              Padding(
-                padding: const EdgeInsets.only(right: 10, top: 2),
-                child: Icon(
-                  selected
-                      ? Icons.check_circle_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  size: 20,
-                  color: selected
-                      ? AppColors.primary
-                      : const Color(0xFFB9CBD9),
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 左轨:色点(或选择勾选框)+ 竖向连接线
+          SizedBox(
+            width: 26,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: _selecting
+                      ? InkWell(
+                          onTap: () => _toggleSelect(note),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Icon(
+                            selected
+                                ? Icons.check_circle_rounded
+                                : Icons.radio_button_unchecked_rounded,
+                            size: 20,
+                            color: selected
+                                ? AppColors.primary
+                                : const Color(0xFFB9CBD9),
+                          ),
+                        )
+                      : Container(
+                          width: 11,
+                          height: 11,
+                          decoration: BoxDecoration(
+                            color: _dotColor(note),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Color.lerp(
+                                  _dotColor(note), Colors.black, 0.25)!,
+                              width: 1,
+                            ),
+                          ),
+                        ),
                 ),
-              ),
-            ],
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    note.content,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 15, height: 1.55),
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      margin: const EdgeInsets.symmetric(vertical: 3),
+                      color: AppColors.line,
+                    ),
                   ),
-                  const SizedBox(height: 5),
-                  Row(
-                    children: [
-                      if (note.favorite) ...[
-                        const Icon(Icons.star_rounded,
-                            size: 13, color: Color(0xFFF9A825)),
-                        const SizedBox(width: 4),
-                      ],
-                      if (note.mood != null) ...[
-                        MoodBadge(mood: note.mood),
-                        const SizedBox(width: 6),
-                      ],
-                      Text(
-                        fullDateTimeLabel(note.createdAt),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textSub.withValues(alpha: 0.75),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          // 右侧:时间在上,文本框在下
+          Expanded(
+            child: InkWell(
+              onTap: () => _openDetail(note),
+              onLongPress: () {
+                if (_selecting) {
+                  _toggleSelect(note);
+                } else {
+                  _enterSelect(note);
+                }
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: EdgeInsets.only(bottom: isLast ? 6 : 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      timelineLabel(note.createdAt),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSub.withValues(alpha: 0.8),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? AppColors.primaryLight.withValues(alpha: 0.35)
+                            : AppColors.card,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: selected
+                              ? AppColors.primary.withValues(alpha: 0.5)
+                              : AppColors.line,
                         ),
                       ),
-                    ],
-                  ),
-                ],
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            note.content,
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 14, height: 1.55),
+                          ),
+                          if (note.favorite || note.mood != null) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                if (note.favorite) ...[
+                                  const Icon(Icons.star_rounded,
+                                      size: 14, color: Color(0xFFF9A825)),
+                                  const SizedBox(width: 5),
+                                ],
+                                if (note.mood != null)
+                                  MoodBadge(mood: note.mood),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

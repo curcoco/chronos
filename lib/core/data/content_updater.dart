@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
-import 'package:student_workbench/core/data/content_store.dart';
-import 'package:student_workbench/core/services/app_info.dart';
-import 'package:student_workbench/core/services/app_log.dart';
+import 'package:chronos/core/data/content_store.dart';
+import 'package:chronos/core/services/app_info.dart';
+import 'package:chronos/core/services/app_log.dart';
 
 /// 远程内容热更服务:小更新不换包。
 ///
@@ -21,7 +21,7 @@ class ContentUpdater {
   Future<void> update() async {
     try {
       final url = await AppInfo.updateCheckUrl();
-      final contentUrl = url.replaceFirst(RegExp(r'latest\.json$'), 'content.json');
+      final contentUrl = contentUrlFor(url);
       final client = HttpClient()
         ..connectionTimeout = const Duration(seconds: 5);
       String body;
@@ -52,6 +52,16 @@ class ContentUpdater {
       AppLog.instance.e('内容热更失败,回退缓存:$e');
       await _loadCache();
     }
+  }
+
+  /// 由更新检查地址推导内容热更地址,兼容两种形态:
+  /// - `.../latest.json` → 同目录 `.../content.json`;
+  /// - 其它(直接填目录/文件名不同)→ 末尾补 `/content.json`。
+  /// 此前只认 `latest.json` 结尾,用户自定义更新源(如 OSS 目录地址)时热更静默失效。
+  static String contentUrlFor(String url) {
+    final base = url.replaceFirst(RegExp(r'/latest\.json$'), '/content.json');
+    if (base.endsWith('/content.json')) return base;
+    return '${base.replaceAll(RegExp(r'/$'), '')}/content.json';
   }
 
   /// 解析 JSON 到 ContentStore(各字段按类型安全解析,缺省不覆盖)。

@@ -3,6 +3,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import 'package:chronos/core/theme.dart';
+
 /// 全局底部提示条管理器(自绘 Overlay 版本)。
 ///
 /// 相比 ScaffoldMessenger / SnackBar:
@@ -124,13 +126,15 @@ class _OverlayToastViewState extends State<_OverlayToastView>
     final Color glass = dark
         ? const Color(0xFF243342).withValues(alpha: 0.72)
         : Colors.white.withValues(alpha: 0.55);
+    // 描边一律用中性灰(不随主题色),避免「彩色下划线」观感。
     final Color borderColor = dark
-        ? Colors.white.withValues(alpha: 0.18)
-        : Colors.white.withValues(alpha: 0.7);
+        ? const Color(0xFF3A4654).withValues(alpha: 0.7)
+        : const Color(0x2E1F2D3D);
     final Color textColor =
         dark ? const Color(0xFFE7EEF5) : const Color(0xFF1F2D3D);
+    // 动作色(如「撤销」)浅色跟随当前色板;深色用固定浅蓝保证深底可读。
     final Color actionColor =
-        dark ? const Color(0xFF4FC3F7) : const Color(0xFF0288D1);
+        dark ? const Color(0xFF4FC3F7) : AppColors.primaryDark;
 
     final hasAction = widget.actionLabel != null && widget.onUndo != null;
     return Positioned(
@@ -157,6 +161,9 @@ class _OverlayToastViewState extends State<_OverlayToastView>
                     Expanded(
                       child: Text(
                         widget.message,
+                        // 无操作按钮时文字居中;带「撤销」等按钮时保持左对齐,按钮靠右。
+                        textAlign:
+                            hasAction ? TextAlign.left : TextAlign.center,
                         style: TextStyle(fontSize: 13, color: textColor),
                       ),
                     ),

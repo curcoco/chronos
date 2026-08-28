@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/features/ledger/services/ledger_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
+import 'package:chronos/features/ledger/models/ledger_txn.dart';
+import 'package:chronos/features/ledger/services/ledger_service.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
 
-/// 「记一笔」底部弹层:类型(支出/收入)+ 金额 + 分类 + 备注 + 日期。
+/// 「记一笔 / 编辑记录」底部弹层:类型(支出/收入)+ 金额 + 分类 + 备注 + 日期。
 /// 返回 `(type, amount, category, note, date)`;取消返回 null。
+/// 传 [initial] 时为编辑模式(字段预填,标题显示「编辑记录」)。
 class LedgerEntrySheet extends StatefulWidget {
   final List<String> customCats;
+  final LedgerTxn? initial;
 
-  const LedgerEntrySheet({super.key, required this.customCats});
+  const LedgerEntrySheet({super.key, required this.customCats, this.initial});
 
   @override
   State<LedgerEntrySheet> createState() => _LedgerEntrySheetState();
@@ -22,6 +25,22 @@ class _LedgerEntrySheetState extends State<LedgerEntrySheet> {
   bool _isExpense = true;
   String _category = '餐饮';
   String _date = todayStr();
+
+  bool get _editing => widget.initial != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final t = widget.initial;
+    if (t != null) {
+      _isExpense = t.type == 'expense';
+      _category = t.category;
+      _date = t.date;
+      _amountCtrl.text =
+          t.amount == t.amount.roundToDouble() ? t.amount.toStringAsFixed(0) : '$t.amount';
+      _noteCtrl.text = t.note;
+    }
+  }
 
   @override
   void dispose() {
@@ -58,6 +77,10 @@ class _LedgerEntrySheetState extends State<LedgerEntrySheet> {
       showFrostedSnack(context, '请输入有效金额');
       return;
     }
+    if (amount > 99999999) {
+      showFrostedSnack(context, '金额过大');
+      return;
+    }
     Navigator.of(context).pop((
       type: _isExpense ? 'expense' : 'income',
       amount: double.parse(amount.toStringAsFixed(2)),
@@ -80,10 +103,10 @@ class _LedgerEntrySheetState extends State<LedgerEntrySheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Center(
+          Center(
             child: Text(
-              '记一笔',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              _editing ? '编辑记录' : '记一笔',
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
             ),
           ),
           const SizedBox(height: 14),

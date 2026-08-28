@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:student_workbench/routes.dart';
-import 'package:student_workbench/core/services/key_store.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/core/widgets/section_card.dart';
-import 'package:student_workbench/features/chat/services/nocturne_service.dart';
+import 'package:chronos/routes.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/services/key_store.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/core/widgets/section_card.dart';
+import 'package:chronos/core/widgets/status_views.dart';
+import 'package:chronos/features/chat/services/nocturne_service.dart';
 
 /// 外置记忆服务页(隐藏入口):配置用户自部署的 Nocturne Memory Core
 /// (Ombre Brain 二改项目,MCP 长期记忆服务)。
@@ -24,6 +26,7 @@ class _ExtensionServicePageState extends State<ExtensionServicePage> {
   final TextEditingController _tokenCtrl = TextEditingController();
   bool _revealToken = false;
   bool _loading = true;
+  String? _loadError; // 配置读取失败(渲染 ErrorView + 重试)
   bool _testing = false;
 
   @override
@@ -40,14 +43,24 @@ class _ExtensionServicePageState extends State<ExtensionServicePage> {
   }
 
   Future<void> _load() async {
-    final url = await KeyStore.instance.get(KeyStore.nocturneUrl);
-    final token = await KeyStore.instance.get(KeyStore.nocturneToken);
-    if (!mounted) return;
-    setState(() {
-      _urlCtrl.text = url;
-      _tokenCtrl.text = token;
-      _loading = false;
-    });
+    try {
+      final url = await KeyStore.instance.get(KeyStore.nocturneUrl);
+      final token = await KeyStore.instance.get(KeyStore.nocturneToken);
+      if (!mounted) return;
+      setState(() {
+        _urlCtrl.text = url;
+        _tokenCtrl.text = token;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      AppLog.instance.e('外置记忆配置读取失败:$e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = '配置读取失败,请重试';
+      });
+    }
   }
 
   Future<void> _saveConfig() async {
@@ -72,9 +85,20 @@ class _ExtensionServicePageState extends State<ExtensionServicePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('外置记忆服务')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
+      body: _loadError != null
+          ? ErrorView(
+              message: _loadError!,
+              onRetry: () {
+                setState(() {
+                  _loadError = null;
+                  _loading = true;
+                });
+                _load();
+              },
+            )
+          : _loading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
               children: [
                 Container(
@@ -84,10 +108,8 @@ class _ExtensionServicePageState extends State<ExtensionServicePage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '外置记忆服务为进阶功能:连接你自己部署的 Nocturne Memory Core'
-                    '(MCP 长期记忆服务,Ombre Brain 二改)。配置后,小掌柜的'
-                    '记忆检索与写入会额外走外置记忆库;未配置或不可用时,'
-                    '自动使用本机内置记忆,不影响聊天。所有信息仅保存在本机。',
+                    '连接自部署的 Nocturne Memory Core(MCP 长期记忆服务),'
+                    '记忆读写额外走外置库;不可用时自动回退本机记忆,不影响聊天。',
                     style: TextStyle(
                         fontSize: 12,
                         height: 1.5,

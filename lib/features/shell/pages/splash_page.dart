@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/data/daily_content.dart';
-import 'package:student_workbench/core/data/content_updater.dart';
-import 'package:student_workbench/routes.dart';
-import 'package:student_workbench/core/services/settings_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/features/chat/pages/chat_page.dart';
-import 'package:student_workbench/features/ledger/pages/ledger_page.dart';
-import 'package:student_workbench/features/shell/pages/main_shell.dart';
-import 'package:student_workbench/features/notes/pages/quick_note_page.dart';
+import 'package:chronos/core/data/daily_content.dart';
+import 'package:chronos/core/data/content_updater.dart';
+import 'package:chronos/routes.dart';
+import 'package:chronos/core/services/settings_service.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/features/chat/pages/chat_page.dart';
+import 'package:chronos/features/ledger/pages/ledger_page.dart';
+import 'package:chronos/features/shell/pages/main_shell.dart';
+import 'package:chronos/features/notes/pages/quick_note_page.dart';
 
 /// 启动页:日期 + 星期 + 问候语(可自定义)+ 随机金句 + 开始今天
 class SplashPage extends StatefulWidget {
@@ -74,7 +74,7 @@ class _SplashPageState extends State<SplashPage> {
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [AppColors.primaryLight, AppColors.primary],
+                      colors: [AppColors.primaryLight, AppColors.primarySoft],
                     ),
                     shape: BoxShape.circle,
                     boxShadow: [
@@ -85,10 +85,10 @@ class _SplashPageState extends State<SplashPage> {
                       ),
                     ],
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.school_rounded,
                     size: 46,
-                    color: Colors.white,
+                    color: AppColors.onPrimarySoft,
                   ),
                 ),
                 const SizedBox(height: 14),

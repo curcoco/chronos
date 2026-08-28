@@ -1,5 +1,7 @@
-import 'package:student_workbench/features/diary/models/diary_entry.dart';
-import 'package:student_workbench/core/services/base_dao.dart';
+import 'package:sqflite/sqflite.dart';
+
+import 'package:chronos/features/diary/models/diary_entry.dart';
+import 'package:chronos/core/services/base_dao.dart';
 
 /// 日记服务(一天可多篇,无上限;本地存储)。CRUD 复用 [BaseDao]。
 class DiaryService extends BaseDao<DiaryEntry> {
@@ -37,7 +39,9 @@ class DiaryService extends BaseDao<DiaryEntry> {
   }
 
   /// 直接插入一篇(用于「撤销删除」恢复原记录),返回新行 id
-  Future<int> restore(DiaryEntry entry) => insert(entry);
+  /// (幂等:记录实际未被删除时跳过,不抛主键冲突)。
+  Future<int> restore(DiaryEntry entry) =>
+      insert(entry, conflictAlgorithm: ConflictAlgorithm.ignore);
 
   /// 全部日记,按创建时间倒序(最新在前)
   Future<List<DiaryEntry>> all() => queryAll();

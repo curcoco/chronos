@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/data/health_content.dart';
-import 'package:student_workbench/features/health/models/workout.dart';
-import 'package:student_workbench/features/coins/services/coin_service.dart';
-import 'package:student_workbench/features/health/services/health_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/features/health/widgets/health_common.dart';
+import 'package:chronos/core/data/health_content.dart';
+import 'package:chronos/features/health/models/workout.dart';
+import 'package:chronos/features/coins/services/coin_service.dart';
+import 'package:chronos/features/health/services/health_service.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/features/health/widgets/health_common.dart';
 
 /// 健康「运动记录」Tab:添加运动、今日打卡、按日分组展示记录。
 class HealthWorkoutTab extends StatefulWidget {
@@ -49,19 +50,31 @@ class _HealthWorkoutTabState extends State<HealthWorkoutTab> {
       _showSnack('请输入时长');
       return;
     }
-    await widget.service.addWorkout(
-        type: _type, minutes: min, date: todayStr());
-    _min.clear();
-    if (!mounted) return;
-    Navigator.of(context).pop();
-    widget.onChanged();
-    _showSnack('已记录');
+    try {
+      await widget.service.addWorkout(
+          type: _type, minutes: min, date: todayStr());
+      _min.clear();
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      widget.onChanged();
+      _showSnack('已记录');
+    } catch (e) {
+      AppLog.instance.e('添加运动记录失败:$e');
+      if (!mounted) return;
+      _showSnack('添加失败,请重试');
+    }
   }
 
   Future<void> _checkin() async {
-    final coin = await CoinService.instance.rewardWorkout(todayStr());
-    if (!mounted) return;
-    _showSnack(coin > 0 ? '运动打卡成功,金币 +$coin' : '今日已打过卡');
+    try {
+      final coin = await CoinService.instance.rewardWorkout(todayStr());
+      if (!mounted) return;
+      _showSnack(coin > 0 ? '运动打卡成功,金币 +$coin' : '今日已打过卡');
+    } catch (e) {
+      AppLog.instance.e('运动打卡失败:$e');
+      if (!mounted) return;
+      _showSnack('打卡失败,请重试');
+    }
   }
 
   void _openSheet() {

@@ -1,0 +1,24 @@
+name: CI
+
+# Chronos 质量闸门:任何 push / PR 自动跑 analyze + test。
+# 打包仍由发版流程手动执行(本地 `flutter build apk --release`)。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  analyze-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: 安装依赖
+        run: flutter pub get
+      - name: 静态分析(零告警)
+        run: dart analyze lib test
+      - name: 单元与迁移测试
+        run: flutter test

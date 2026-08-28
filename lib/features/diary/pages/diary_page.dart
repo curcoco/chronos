@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/features/diary/models/diary_entry.dart';
-import 'package:student_workbench/features/diary/services/diary_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/core/widgets/app_text_field.dart';
-import 'package:student_workbench/core/widgets/confirm_dialog.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/core/widgets/mood_badge.dart';
+import 'package:chronos/features/diary/models/diary_entry.dart';
+import 'package:chronos/features/diary/services/diary_service.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/core/widgets/app_text_field.dart';
+import 'package:chronos/core/widgets/confirm_dialog.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/core/widgets/mood_badge.dart';
+import 'package:chronos/core/widgets/status_views.dart';
 
 /// 日记:按天一篇的长文本写作,可切换日期、可查看/回改历史
 class DiaryPage extends StatefulWidget {
@@ -27,6 +29,7 @@ class _DiaryPageState extends State<DiaryPage>
   String? _mood;
   List<DiaryEntry> _entries = [];
   bool _loading = true;
+  String? _loadError; // 日记列表加载失败(渲染 ErrorView + 重试)
   bool _saving = false;
 
   static const List<(String, String)> _moodOptions = [
@@ -49,12 +52,22 @@ class _DiaryPageState extends State<DiaryPage>
   }
 
   Future<void> _loadList() async {
-    final entries = await _service.all();
-    if (!mounted) return;
-    setState(() {
-      _entries = entries;
-      _loading = false;
-    });
+    try {
+      final entries = await _service.all();
+      if (!mounted) return;
+      setState(() {
+        _entries = entries;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      AppLog.instance.e('日记列表加载失败:$e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = '日记加载失败,请重试';
+      });
+    }
   }
 
   Future<void> _save() async {
@@ -73,6 +86,10 @@ class _DiaryPageState extends State<DiaryPage>
       await _loadList();
       if (!mounted) return;
       showFrostedSnack(context, '日记已保存');
+    } catch (e) {
+      AppLog.instance.e('日记保存失败:$e');
+      if (!mounted) return;
+      showFrostedSnack(context, '保存失败,请重试');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -186,9 +203,20 @@ class _DiaryPageState extends State<DiaryPage>
           tabs: const [Tab(text: '写作'), Tab(text: '历史')],
         ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
+      body: _loadError != null
+          ? ErrorView(
+              message: _loadError!,
+              onRetry: () {
+                setState(() {
+                  _loadError = null;
+                  _loading = true;
+                });
+                _loadList();
+              },
+            )
+          : _loading
+              ? const Center(child: CircularProgressIndicator())
+              : TabBarView(
               controller: _tabs,
               children: [
                 _buildEditor(cur),
@@ -242,7 +270,7 @@ class _DiaryPageState extends State<DiaryPage>
             minLines: 10,
             maxLines: null,
             maxLength: 5000,
-            hintText: '写下此刻的日记…一天可记多篇',
+            hintText: '写下此刻的日记…',
             border: InputBorder.none,
             submitOnEnter: false, // 长文本:回车正常换行
             style: const TextStyle(fontSize: 15, height: 1.7),

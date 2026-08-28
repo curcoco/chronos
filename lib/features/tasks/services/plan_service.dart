@@ -1,5 +1,5 @@
-import 'package:student_workbench/features/tasks/models/plan_item.dart';
-import 'package:student_workbench/core/services/db_helper.dart';
+import 'package:chronos/features/tasks/models/plan_item.dart';
+import 'package:chronos/core/services/db_helper.dart';
 
 /// 计划服务:本周计划 / 长期目标(本地 SQLite;完成态、排序、截止日期)
 class PlanService {

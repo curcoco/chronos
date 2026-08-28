@@ -1,6 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 
-import 'package:student_workbench/core/services/db_helper.dart';
+import 'package:chronos/core/services/db_helper.dart';
 
 /// 泛型数据访问基类。收敛 note / diary / wish 等「单例 + 简单 CRUD」
 /// 服务的重复样板:子类只需给出表名、`fromMap` 与排序,即可复用增删查。
@@ -24,10 +24,13 @@ abstract class BaseDao<T> {
 
   Future<Database> get _db async => dbHelper.database;
 
-  /// 插入一条,返回新行 id
-  Future<int> insert(T entity) async {
+  /// 插入一条,返回新行 id。
+  /// [conflictAlgorithm] 传入时用于「撤销恢复」等幂等场景
+  /// (如 [ConflictAlgorithm.ignore]:行已存在则跳过,不抛主键冲突)。
+  Future<int> insert(T entity, {ConflictAlgorithm? conflictAlgorithm}) async {
     final db = await _db;
-    return db.insert(table, toMap(entity));
+    return db.insert(table, toMap(entity),
+        conflictAlgorithm: conflictAlgorithm);
   }
 
   /// 查全部(按 [defaultOrderBy] 或传入的 [orderBy] 排序)

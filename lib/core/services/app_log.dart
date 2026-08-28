@@ -18,6 +18,7 @@ class AppLog {
 
   final List<String> _buffer = [];
   Timer? _flushTimer;
+  bool _flushing = false;
 
   /// 启动时初始化(惰性启动 flush 定时器)。
   void init() {
@@ -27,8 +28,12 @@ class AppLog {
   /// 记录一条普通日志(如用户操作)。
   void i(String message) => _append('INFO', message);
 
-  /// 记录一条异常日志(如网络/保存失败)。
-  void e(String message) => _append('ERROR', message);
+  /// 记录一条异常日志(如网络/保存失败)。错误立即尝试落盘,
+  /// 避免应用被杀/崩溃时诊断信息只留在内存里。
+  void e(String message) {
+    _append('ERROR', message);
+    flush();
+  }
 
   void _append(String level, String message) {
     final line =
@@ -47,21 +52,28 @@ class AppLog {
     final dir = await getApplicationDocumentsDirectory();
     return '${dir.path}/app_log.txt';
   }  /// 把缓冲写回日志文件(新日志追加在文件头部,保持"最新在上")。
+  /// 并发保护:正在写盘时再次调用直接返回,避免定时 flush 与错误即时 flush 竞态丢日志。
   Future<void> flush() async {
-    if (_buffer.isEmpty) return;
-    final path = await logFilePath();
-    final file = File(path);
-    final existing = await file.exists() ? await file.readAsString() : '';
-    final head = '${_buffer.join('\n')}\n';
-    // 文件总长度限制(约 256KB),超长截断尾部(旧日志)。
-    const maxBytes = 256 * 1024;
-    var content = head + existing;
-    final bytes = utf8.encode(content);
-    if (bytes.length > maxBytes) {
-      content = utf8.decode(bytes.sublist(bytes.length - maxBytes), allowMalformed: true);
+    if (_buffer.isEmpty || _flushing) return;
+    _flushing = true;
+    try {
+      final path = await logFilePath();
+      final file = File(path);
+      final existing = await file.exists() ? await file.readAsString() : '';
+      final head = '${_buffer.join('\n')}\n';
+      // 文件总长度限制(约 256KB),超长截断尾部(旧日志)。
+      const maxBytes = 256 * 1024;
+      var content = head + existing;
+      final bytes = utf8.encode(content);
+      if (bytes.length > maxBytes) {
+        content = utf8
+            .decode(bytes.sublist(bytes.length - maxBytes), allowMalformed: true);
+      }
+      await file.writeAsString(content, flush: true);
+      _buffer.clear();
+    } finally {
+      _flushing = false;
     }
-    await file.writeAsString(content, flush: true);
-    _buffer.clear();
   }
 
   /// 立即 flush 并返回日志文本(供备份打包)。

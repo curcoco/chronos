@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/data/health_content.dart';
-import 'package:student_workbench/features/health/models/kitchen_item.dart';
-import 'package:student_workbench/features/health/services/health_service.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/widgets/confirm_dialog.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/features/health/widgets/health_common.dart';
+import 'package:chronos/core/data/health_content.dart';
+import 'package:chronos/features/health/models/kitchen_item.dart';
+import 'package:chronos/features/health/services/health_service.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/widgets/confirm_dialog.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/features/health/widgets/health_common.dart';
 
 /// 健康「厨房秘籍」Tab:按分类浏览 / 添加 / 删除菜品。
 class HealthKitchenTab extends StatefulWidget {
@@ -55,21 +56,44 @@ class _HealthKitchenTabState extends State<HealthKitchenTab> {
       _showSnack('请输入名称');
       return;
     }
-    await widget.service.addKitchenItem(
-      cat: _newCat,
-      name: name,
-      cal: int.tryParse(_cal.text) ?? 0,
-      price: double.tryParse(_price.text) ?? 0,
-      link: _link.text.trim(),
-    );
-    _name.clear();
-    _cal.clear();
-    _price.clear();
-    _link.clear();
-    if (!mounted) return;
-    Navigator.of(context).pop();
-    widget.onChanged();
-    _showSnack('已添加');
+    // 输入校验:填了但格式不对要明确提示,不再静默存 0。
+    final calRaw = _cal.text.trim();
+    final priceRaw = _price.text.trim();
+    if (calRaw.isNotEmpty && int.tryParse(calRaw) == null) {
+      _showSnack('卡路里请输入整数');
+      return;
+    }
+    if (priceRaw.isNotEmpty && double.tryParse(priceRaw) == null) {
+      _showSnack('价格请输入数字');
+      return;
+    }
+    final cal = int.tryParse(calRaw) ?? 0;
+    final price = double.tryParse(priceRaw) ?? 0;
+    if (cal < 0 || price < 0) {
+      _showSnack('数值不能为负');
+      return;
+    }
+    try {
+      await widget.service.addKitchenItem(
+        cat: _newCat,
+        name: name,
+        cal: cal,
+        price: price,
+        link: _link.text.trim(),
+      );
+      _name.clear();
+      _cal.clear();
+      _price.clear();
+      _link.clear();
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      widget.onChanged();
+      _showSnack('已添加');
+    } catch (e) {
+      AppLog.instance.e('添加厨房条目失败:$e');
+      if (!mounted) return;
+      _showSnack('添加失败,请重试');
+    }
   }
 
   Future<void> _delete(KitchenItem item) async {
@@ -81,8 +105,13 @@ class _HealthKitchenTabState extends State<HealthKitchenTab> {
       destructive: true,
     );
     if (!ok || !mounted) return;
-    await widget.service.deleteKitchenItem(item.id!);
-    widget.onChanged();
+    try {
+      await widget.service.deleteKitchenItem(item.id!);
+      widget.onChanged();
+    } catch (e) {
+      AppLog.instance.e('删除厨房条目失败:$e');
+      _showSnack('删除失败,请重试');
+    }
   }
 
   void _openSheet() {

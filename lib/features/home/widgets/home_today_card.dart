@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/features/tasks/models/student_task.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/widgets/section_card.dart';
+import 'package:chronos/features/tasks/models/student_task.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/widgets/section_card.dart';
 
 /// 首页今日任务卡:进度条 + 任务清单。
 /// 固定展示至多 3 条;溢出时卡片内部可上滑查看全部。

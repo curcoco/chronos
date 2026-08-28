@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/features/ledger/models/ledger_txn.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/features/ledger/widgets/ledger_format.dart';
+import 'package:chronos/features/ledger/models/ledger_txn.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/features/ledger/widgets/ledger_format.dart';
 
 /// 记账「图表」Tab:近 7 天收支柱状图 + 本月汇总。
 class LedgerChartTab extends StatelessWidget {

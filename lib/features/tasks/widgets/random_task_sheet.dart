@@ -2,10 +2,10 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/data/daily_content.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/features/tasks/widgets/add_task_sheet.dart' show AddTaskResult;
-import 'package:student_workbench/core/widgets/section_card.dart' show categoryColor;
+import 'package:chronos/core/data/daily_content.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/features/tasks/widgets/add_task_sheet.dart' show AddTaskResult;
+import 'package:chronos/core/widgets/section_card.dart' show categoryColor;
 
 enum _PriorityScheme { user, random }
 

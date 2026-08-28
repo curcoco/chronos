@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/theme.dart';
+import 'package:chronos/core/theme.dart';
 
 /// 模块入口卡片(第二批模块在知识/生活 Tab 的入口)
 class ModuleCard extends StatelessWidget {

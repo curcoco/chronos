@@ -1,7 +1,7 @@
-import 'package:student_workbench/features/health/models/kitchen_item.dart';
-import 'package:student_workbench/features/health/models/user_video.dart';
-import 'package:student_workbench/features/health/models/workout.dart';
-import 'package:student_workbench/core/services/db_helper.dart';
+import 'package:chronos/features/health/models/kitchen_item.dart';
+import 'package:chronos/features/health/models/user_video.dart';
+import 'package:chronos/features/health/models/workout.dart';
+import 'package:chronos/core/services/db_helper.dart';
 
 /// 健康管理服务:厨房秘籍 / 运动记录 / 自传跟练视频(纯本地)
 class HealthService {

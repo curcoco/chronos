@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/widgets/section_card.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/widgets/section_card.dart';
 
 /// 首页每日英语一句卡。
 class HomeEnglishCard extends StatelessWidget {

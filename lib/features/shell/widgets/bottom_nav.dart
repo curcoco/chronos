@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/core/theme.dart';
+import 'package:chronos/core/theme.dart';
 
 /// 底部导航栏:5 个 Tab(首页 / 计划 / 灵感速记 / 记账 / 闲话铺)。
 class BottomNav extends StatelessWidget {

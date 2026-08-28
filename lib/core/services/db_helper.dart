@@ -9,7 +9,7 @@ class DbHelper {
   static final DbHelper instance = DbHelper._();
 
   /// 当前数据库版本(结构变更时递增)
-  static const int dbVersion = 13;
+  static const int dbVersion = 16;
 
   Database? _db;
 
@@ -144,6 +144,94 @@ class DbHelper {
     // v13:健康-视频跟练支持用户自传视频(user_videos 表)。
     if (oldVersion < 13) {
       await _createUserVideosTable(db);
+    }
+    // v14:① 闲话铺消息支持图片持久化(chat_messages.image_path,
+    // 历史消息也能显示原图而不是占位);② 记忆去重唯一索引——
+    // 先清理历史重复(kind+content 相同只留最早一条),再建唯一索引,
+    // 防止自动提炼反复堆积(与 MemoryService.add 的去重查询互为双保险)。
+    if (oldVersion < 14) {
+      // 兼容:① 从 v12 之前迁移的库,chat_messages 由 v12 步骤按新 schema 创建
+      // (已含 image_path),此处需按列存在性补齐,避免「重复列」报错;
+      // ② 测试用最小库可能没有 chat_messages/memories 表,表不存在时跳过。
+      final hasChatTable = await db.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type='table' AND name='chat_messages'")
+          .then((r) => r.isNotEmpty);
+      if (hasChatTable) {
+        final cols = await db.rawQuery('PRAGMA table_info(chat_messages)');
+        final hasImage = cols.any((c) => c['name'] == 'image_path');
+        if (!hasImage) {
+          await db.execute(
+              'ALTER TABLE chat_messages ADD COLUMN image_path TEXT');
+        }
+      }
+      // memories 表(v6 起)可能存在历史重复:先清理再建唯一索引。
+      final hasMemories = await db.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type='table' AND name='memories'")
+          .then((r) => r.isNotEmpty);
+      if (hasMemories) {
+        await db.execute('DELETE FROM memories WHERE id NOT IN '
+            '(SELECT MIN(id) FROM memories GROUP BY kind, content)');
+        await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS '
+            'idx_memories_kind_content ON memories(kind, content)');
+      }
+    }
+    // v15:chat_messages 加 reasoning_content 列(DeepSeek 等推理模型的
+    // 思维链回传硬性要求:assistant 消息需把上一轮的 reasoning_content
+    // 原样带回,否则 API 拒绝;按列存在性补齐,兼容 v12 前旧库)。
+    if (oldVersion < 15) {
+      final hasChatTable = await db.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type='table' AND name='chat_messages'")
+          .then((r) => r.isNotEmpty);
+      if (hasChatTable) {
+        final cols = await db.rawQuery('PRAGMA table_info(chat_messages)');
+        final hasReasoning = cols.any((c) => c['name'] == 'reasoning_content');
+        if (!hasReasoning) {
+          await db.execute(
+              'ALTER TABLE chat_messages ADD COLUMN reasoning_content TEXT');
+        }
+      }
+    }
+    // v16:memories 加「情感衰减/浮现/可见性」列(按列存在性补齐,兼容旧库)。
+    if (oldVersion < 16) {
+      final colNames = await db
+          .rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='memories'")
+          .then((r) => r.isNotEmpty)
+          .then((has) async {
+        if (!has) return <String>{};
+        final cols = await db.rawQuery('PRAGMA table_info(memories)');
+        return cols.map((c) => c['name'] as String).toSet();
+      });
+      if (colNames.isNotEmpty) {
+        if (!colNames.contains('importance')) {
+          await db.execute(
+              'ALTER TABLE memories ADD COLUMN importance INTEGER NOT NULL DEFAULT 5');
+        }
+        if (!colNames.contains('pinned')) {
+          await db.execute(
+              'ALTER TABLE memories ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
+        }
+        if (!colNames.contains('last_activated')) {
+          await db.execute('ALTER TABLE memories ADD COLUMN last_activated INTEGER');
+        }
+        if (!colNames.contains('activation_count')) {
+          await db.execute(
+              'ALTER TABLE memories ADD COLUMN activation_count INTEGER NOT NULL DEFAULT 0');
+        }
+        if (!colNames.contains('resolved')) {
+          await db.execute(
+              'ALTER TABLE memories ADD COLUMN resolved INTEGER NOT NULL DEFAULT 0');
+        }
+        if (!colNames.contains('visibility')) {
+          await db.execute(
+              "ALTER TABLE memories ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'");
+        }
+        if (!colNames.contains('domain')) {
+          await db.execute('ALTER TABLE memories ADD COLUMN domain TEXT');
+        }
+        if (!colNames.contains('tags')) {
+          await db.execute('ALTER TABLE memories ADD COLUMN tags TEXT');
+        }
+      }
     }
   }
 
@@ -334,9 +422,20 @@ class DbHelper {
         source TEXT NOT NULL DEFAULT 'manual',
         cloud_synced INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        updated_at INTEGER NOT NULL,
+        importance INTEGER NOT NULL DEFAULT 5,
+        pinned INTEGER NOT NULL DEFAULT 0,
+        last_activated INTEGER,
+        activation_count INTEGER NOT NULL DEFAULT 0,
+        resolved INTEGER NOT NULL DEFAULT 0,
+        visibility TEXT NOT NULL DEFAULT 'public',
+        domain TEXT,
+        tags TEXT
       )
     ''');
+    // v14 起:同 kind 下内容唯一,防止自动提炼重复堆积。
+    await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS '
+        'idx_memories_kind_content ON memories(kind, content)');
     await db.execute('''
       CREATE TABLE diary_entries(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -384,6 +483,8 @@ class DbHelper {
         session_id INTEGER NOT NULL,
         role TEXT NOT NULL,
         content TEXT NOT NULL,
+        image_path TEXT,
+        reasoning_content TEXT,
         created_at INTEGER NOT NULL
       )
     ''');

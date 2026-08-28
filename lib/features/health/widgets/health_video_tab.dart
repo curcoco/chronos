@@ -6,14 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 
-import 'package:student_workbench/core/data/health_content.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/core/widgets/confirm_dialog.dart';
-import 'package:student_workbench/core/widgets/frosted_snack.dart';
-import 'package:student_workbench/features/coins/services/coin_service.dart';
-import 'package:student_workbench/features/health/models/user_video.dart';
-import 'package:student_workbench/features/health/services/health_service.dart';
+import 'package:chronos/core/data/health_content.dart';
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/core/widgets/confirm_dialog.dart';
+import 'package:chronos/core/widgets/frosted_snack.dart';
+import 'package:chronos/features/coins/services/coin_service.dart';
+import 'package:chronos/features/health/models/user_video.dart';
+import 'package:chronos/features/health/services/health_service.dart';
 
 /// 健康「视频跟练」Tab:内置计时器 + 打卡领金币 + 内置跟练列表 +
 /// 用户自传视频(上传本地视频、播放、删除)。
@@ -69,28 +70,43 @@ class _HealthVideoTabState extends State<HealthVideoTab> {
       showFrostedSnack(context, '先开始计时再打卡吧');
       return;
     }
-    final coin = await CoinService.instance.rewardVideo(todayStr());
-    if (!mounted) return;
-    showFrostedSnack(
-      context,
-      coin > 0 ? '跟练完成,金币 +$coin(计时 ${_sec ~/ 60} 分钟)' : '今日已打过卡',
-    );
-    _reset();
+    try {
+      final coin = await CoinService.instance.rewardVideo(todayStr());
+      if (!mounted) return;
+      showFrostedSnack(
+        context,
+        coin > 0 ? '跟练完成,金币 +$coin(计时 ${_sec ~/ 60} 分钟)' : '今日已打过卡',
+      );
+      _reset();
+    } catch (e) {
+      AppLog.instance.e('视频跟练打卡失败:$e');
+      if (!mounted) return;
+      showFrostedSnack(context, '打卡失败,请重试');
+    }
   }
 
   /// 上传本地视频:选文件 → 复制到应用文档目录 → 存库。
   Future<void> _upload() async {
-    final picked = await FilePicker.platform.pickFiles(
-      type: FileType.video,
-      allowMultiple: false,
-    );
-    final path = picked?.files.single.path;
+    final String? path;
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.video,
+        allowMultiple: false,
+      );
+      path = picked?.files.single.path;
+    } catch (e) {
+      AppLog.instance.e('选择视频失败(可能权限被拒):$e');
+      if (!mounted) return;
+      showFrostedSnack(context, '无法访问文件,请检查存储权限');
+      return;
+    }
     if (path == null || !mounted) return;
+    File? dest;
     try {
       final dir = await getApplicationDocumentsDirectory();
       final stamp = DateTime.now().millisecondsSinceEpoch;
       final ext = path.contains('.') ? path.split('.').last : 'mp4';
-      final dest = File('${dir.path}/video_$stamp.$ext');
+      dest = File('${dir.path}/video_$stamp.$ext');
       await File(path).copy(dest.path);
 
       // 输入标题(可选备注)
@@ -130,7 +146,16 @@ class _HealthVideoTabState extends State<HealthVideoTab> {
           ],
         ),
       );
-      if (ok != true || !mounted) return;
+      if (ok != true) {
+        // 用户取消:清理已复制的临时文件,不留孤儿文件。
+        try {
+          if (await dest.exists()) await dest.delete();
+        } catch (e) {
+          AppLog.instance.e('清理取消上传的视频文件失败:$e');
+        }
+        return;
+      }
+      if (!mounted) return;
       final title = titleCtrl.text.trim().isEmpty
           ? '我的视频'
           : titleCtrl.text.trim();
@@ -142,7 +167,8 @@ class _HealthVideoTabState extends State<HealthVideoTab> {
       widget.onChanged();
       if (!mounted) return;
       showFrostedSnack(context, '已添加跟练视频');
-    } catch (_) {
+    } catch (e) {
+      AppLog.instance.e('添加跟练视频失败:$e');
       if (!mounted) return;
       showFrostedSnack(context, '添加失败,请重试');
     }
@@ -167,15 +193,23 @@ class _HealthVideoTabState extends State<HealthVideoTab> {
       destructive: true,
     );
     if (!ok || !mounted) return;
-    await widget.service.deleteUserVideo(v.id!);
-    // 顺带删除本地文件(尽力而为)。
     try {
-      final f = File(v.path);
-      if (await f.exists()) await f.delete();
-    } catch (_) {}
-    widget.onChanged();
-    if (!mounted) return;
-    showFrostedSnack(context, '已删除');
+      await widget.service.deleteUserVideo(v.id!);
+      // 顺带删除本地文件(尽力而为,失败仅记录不影响删除)。
+      try {
+        final f = File(v.path);
+        if (await f.exists()) await f.delete();
+      } catch (e) {
+        AppLog.instance.e('删除视频文件失败:$e');
+      }
+      widget.onChanged();
+      if (!mounted) return;
+      showFrostedSnack(context, '已删除');
+    } catch (e) {
+      AppLog.instance.e('删除视频记录失败:$e');
+      if (!mounted) return;
+      showFrostedSnack(context, '删除失败,请重试');
+    }
   }
 
   @override
@@ -192,7 +226,7 @@ class _HealthVideoTabState extends State<HealthVideoTab> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [AppColors.primaryLight, AppColors.primary],
+              colors: [AppColors.primaryLight, AppColors.primarySoft],
             ),
             borderRadius: BorderRadius.circular(18),
           ),
@@ -200,11 +234,11 @@ class _HealthVideoTabState extends State<HealthVideoTab> {
             children: [
               Text(
                 '$mm:$ss',
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 46,
                     fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    fontFeatures: [FontFeature.tabularFigures()]),
+                    color: AppColors.onPrimarySoft,
+                    fontFeatures: const [FontFeature.tabularFigures()]),
               ),
               const SizedBox(height: 12),
               Row(
@@ -245,7 +279,7 @@ class _HealthVideoTabState extends State<HealthVideoTab> {
         const Text('我的视频',
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
-        Text('上传你自己的跟练视频,点击播放;添加按钮在下方。',
+        Text('上传跟练视频,点击播放。',
             style: TextStyle(fontSize: 11, color: AppColors.textSub)),
         const SizedBox(height: 8),
         // 我的视频列表

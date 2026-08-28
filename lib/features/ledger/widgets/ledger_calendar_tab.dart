@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'package:student_workbench/features/ledger/models/ledger_txn.dart';
-import 'package:student_workbench/core/theme.dart';
-import 'package:student_workbench/core/utils/dates.dart';
-import 'package:student_workbench/features/ledger/widgets/ledger_format.dart';
+import 'package:chronos/features/ledger/models/ledger_txn.dart';
+import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/utils/dates.dart';
+import 'package:chronos/features/ledger/widgets/ledger_format.dart';
 
 /// 记账「日历」Tab:按月展示每日支出热力 + 点选某天看当日流水。
 class LedgerCalendarTab extends StatefulWidget {

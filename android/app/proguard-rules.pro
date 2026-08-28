@@ -8,7 +8,7 @@
 -keep class io.flutter.embedding.** { *; }
 
 # 本项目原生更新安装通道(MethodChannel + FileProvider)。
--keep class com.student.student_workbench.** { *; }
+-keep class com.chronos.workbench.** { *; }
 -keep class androidx.core.content.FileProvider { *; }
 
 # audioplayers / flutter_tts / share_plus / sqflite / path_provider 等
