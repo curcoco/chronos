@@ -30,7 +30,7 @@
 5. 设计铁律：浅蓝极简、无 emoji、纯本地优先；联网功能（天气 / 闲话铺 / 记忆同步 / 更新检查）单独存在。
 6. 验证需要 **danger-full-access** 授权（flutter/gradle/dart 会 spawn 子进程被沙箱拦，第一次真实拦截时申请一次）。
 7. 收尾：把改动追加到 `交接文档.md`「九、变更日志」的「未发版」条目，**不升版本、不动 latest.json**。
-8. **打包一律用 v8a 小包（当前阶段）**：`flutter build apk --release --target-platform android-arm64`（约 21MB，现代手机都是 arm64）。**标准版（通用包，含全部 ABI）等小言觉得项目够成熟后再打**——现在所有验证/测试包都出 v8a 小包。
+8. **打包一律用 v8a 小包（当前阶段）**：`flutter build apk --release --split-per-abi --target-platform android-arm64`（约 21MB，现代手机都是 arm64，产物 `app-arm64-v8a-release.apk`）。**注意**：只加 `--target-platform android-arm64` 会出含全部 ABI 的通用包（实测 badging 含 arm64-v8a/armeabi-v7a/x86_64），**必须配 `--split-per-abi` 才得到真正的单架构小包**。**标准版（通用包）等小言觉得项目够成熟后再打**——现在所有验证/测试包都出 v8a 小包。
 
 ## ⚠️ 安全红线（每次动手前过一遍，尤其删除/清理/命令类操作）
 
@@ -55,10 +55,12 @@
 - 参考代码 `D:\dev\_ref\` 只读，不修改。
 - 网络受限时按需申请权限，别绕过沙箱硬来。
 
-## 三、项目现状（2026-08-20）
+## 三、项目现状（2026-08-28 更新）
 
-- 版本号：`2.3.0+27`（pubspec.yaml）；**2.3.0 已正式发版**（2026-08-20，含此前全部「未发版」改动：闲话铺修复、健壮性批量修复、聊天增强、体验优化、文案精简、改名 chronos）。
-- 已在工作区根目录打好的验证 APK：`build\app\outputs\flutter-apk\app-release.apk`（随改随打，用户说打包就重新打）；正式发布件 `releases\chronos-2.3.0.apk`。
+- 版本号：`2.3.0+27`（pubspec.yaml）；**2.3.0 已正式发版**（2026-08-20）；此后为**未发版**累计（见 `交接文档.md` §九），**未升版本、未动 latest.json**。
+- **功能完善阶段（①-④，2026-08-28 完成）**：①记忆系统升级（DB v16：重要性/置顶/衰减/可见性/标签 + 浮现打分 + 本地语义检索 + 注入预算）；②Auto Memory（掌柜用 `<mem_create/edit/delete>` 标签自主写/改/删用户档案，标签剥离、每轮≤3、`settings_service.autoMemory` 开关）；③Token 仪表盘（`LlmUsage` + chat 顶部 `ChatTokenBar`，含缓存命中）；④交互细节（聊天长按菜单 保存图片/分支新会话、记忆页批量管理+长按复制+标签筛选、打字动画、会话文件夹 DB v17）。**测试 84 项全过**（`flutter test`），`dart analyze lib test` 零告警。
+- **回滚点已建**（git）：功能阶段备份 `a4b3508`、④成果 `7fad4d4`、文档 `2d77a8d`、拆分 `2ad1c55`、文档同步 `3c72dd6`。
+- 验证 APK：`build\app\outputs\flutter-apk\app-arm64-v8a-release.apk`（**v8a 小包，21.1MB**，用户 2026-08-28 让我「打个小包看看」时产出）；正式发布件 `releases\chronos-2.3.0.apk` 未重打。
 - 2.3.0 发版包含（此前的未发版改动）：
   - 闲话铺「配置正确但回复为空」修复：SSE 零事件自动降级非流式、错误事件透出、400/422 降级去掉 temperature、端点兼容。
   - 健壮性批量修复：日志 URL 脱敏（天气 Key 不再进日志）、页面加载 ErrorView+重试、金币/任务/兑换事务化、写操作兜底、备份跨版本校验、内容热更地址兼容、会话标题 emoji 截断等。
@@ -69,6 +71,7 @@
 
 ## 四、还没做 / 可能的方向
 
+- **UI 整体美化**（浅蓝极简观感）——用户明确**放在功能完善阶段之后单独做**，功能阶段(①-④)已结束，是当前的计划中下一项。
 - **正式发版**（四步：升 version → 同步 `app_info.dart` latestVersion → 更新 latest.json → 复制到 releases/chronos-X.Y.Z.apk）——**用户要求才做**，别主动做。
 - **备选功能（用户确认"以后做"，当前不做）**：① 语音输入 ASR（现在只有朗读 TTS，没有语音转文字）；② 跨模块全局搜索（笔记/日记/记账一起搜）；③ 聊天发文件（"＋发图片/文件"里文件那半，模型需支持读文件，成本高）。
 - **发布 / 开源备选方案**：给朋友发 APK 或 GitHub 公开的具体步骤已整理在 `交接文档.md`「十」——需要时照做（签名已配好、敏感文件已排除）。
@@ -84,7 +87,9 @@ $env:PATH="D:\dev\flutter\bin;D:\dev\flutter\bin\cache\dart-sdk\bin;$env:PATH"; 
 # 打包(仅在用户要求时)
 $env:ANDROID_SDK_ROOT="D:\dev\android-sdk"; flutter build apk --release
 # 验证测试包:优先打 v8a 小包(21MB,现代手机都是 arm64;用户要求测试版用 v8a)
-$env:ANDROID_SDK_ROOT="D:\dev\android-sdk"; flutter build apk --release --target-platform android-arm64
+# 注意:只加 --target-platform android-arm64 仍会出「含 3 架构」的通用包(实测 badging 含 arm64-v8a/armeabi-v7a/x86_64);
+# 要真正的单架构小包必须加 --split-per-abi(产物为 app-arm64-v8a-release.apk)。
+$env:ANDROID_SDK_ROOT="D:\dev\android-sdk"; flutter build apk --release --split-per-abi --target-platform android-arm64
 ```
 
 ## 六、关于小言(相处速写)
