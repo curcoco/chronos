@@ -134,6 +134,23 @@ void main() {
     expect(await service.maybeRewardYesterday(budgetMinutes: 120), 0);
   });
 
+  test('recentEntertainmentByDay:按天分组、天内按秒降序、只含娱乐', () async {
+    await DbHelper.instance.database;
+    final today = dateKey(DateTime.now());
+    final yesterday = dateKey(DateTime.now().subtract(const Duration(days: 1)));
+    await insertUsage(today, 'com.ss.android.ugc.aweme', 'entertainment', 1200);
+    await insertUsage(today, 'tv.danmaku.bili', 'entertainment', 2400);
+    await insertUsage(yesterday, 'tv.danmaku.bili', 'entertainment', 600);
+    await insertUsage(today, 'com.chronos.workbench', 'tool', 300); // 非娱乐不计
+
+    final data = await service.recentEntertainmentByDay(7);
+    expect(data[today]!.length, 2);
+    expect(data[today]!.first.packageName, 'tv.danmaku.bili'); // 天内降序
+    expect(data[today]!.first.label, '哔哩哔哩'); // 显示名回退内置预设
+    expect(data[today]!.last.minutes, 20);
+    expect(data[yesterday]!.single.minutes, 10);
+  });
+
   test('降级:无原生通道时 syncRecent 返回 false 且不动已有数据', () async {
     await DbHelper.instance.database;
     final today = dateKey(DateTime.now());

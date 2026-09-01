@@ -260,6 +260,32 @@ class ScreenTimeService {
     ];
   }
 
+  /// 近 [days] 天每天的娱乐 app 明细(天 → 按秒降序的 app 列表)。
+  /// 趋势图用:细看「哪几天飘了、是哪个 app 干的」。
+  Future<Map<String, List<ScreenAppUsage>>> recentEntertainmentByDay(
+      int days) async {
+    final db = await _db.database;
+    final since = dateKey(DateTime.now().subtract(Duration(days: days - 1)));
+    final rows = await db.query('screen_usage',
+        where: 'category = ? AND day >= ?',
+        whereArgs: [catEntertainment, since],
+        orderBy: 'day, seconds DESC');
+    if (rows.isEmpty) return const {};
+    final labels = await appLabels();
+    final byDay = <String, List<ScreenAppUsage>>{};
+    for (final r in rows) {
+      final pkg = r['package'] as String;
+      byDay.putIfAbsent(r['day'] as String, () => []).add(ScreenAppUsage(
+            packageName: pkg,
+            label:
+                labels[pkg] ?? builtinEntertainment[pkg] ?? pkg,
+            seconds: (r['seconds'] as num?)?.toInt() ?? 0,
+            category: r['category'] as String,
+          ));
+    }
+    return byDay;
+  }
+
   /// 昨日娱乐未超预算则发 2 金币(每天至多一次;受每日赚币上限约束)。
   /// 昨日完全没有数据(未授权/未同步)时不发,避免误奖。
   /// 返回实际发放数量(0 = 未发)。

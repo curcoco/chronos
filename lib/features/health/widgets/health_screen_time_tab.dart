@@ -7,6 +7,7 @@ import 'package:chronos/features/coins/services/coin_service.dart';
 import 'package:chronos/features/health/pages/screen_app_classify_page.dart';
 import 'package:chronos/features/health/services/screen_time_service.dart';
 import 'package:chronos/features/health/widgets/health_common.dart';
+import 'package:chronos/features/health/widgets/screen_week_trend_sheet.dart';
 
 /// 健康「屏幕时间」Tab(防沉迷):
 /// 权限门 → 今日娱乐/预算卡 → 娱乐热力图(近一年,GitHub 式)→ 今日娱乐排行 → 分类管理入口。
@@ -588,8 +589,26 @@ class _HealthScreenTimeTabState extends State<HealthScreenTimeTab>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('今日娱乐排行',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+          Row(
+            children: [
+              const Text('今日娱乐排行',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () => showScreenWeekTrendSheet(context),
+                icon: Icon(Icons.bar_chart_rounded,
+                    size: 14, color: AppColors.primary),
+                label: Text('近7天趋势',
+                    style:
+                        TextStyle(fontSize: 11, color: AppColors.primary)),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 30),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
           if (_top.isEmpty)
             Padding(
