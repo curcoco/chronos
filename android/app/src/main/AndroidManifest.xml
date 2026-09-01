@@ -13,6 +13,10 @@
     <!-- 防沉迷「屏幕时间」:列出已装 app 供分类需要全量包可见
          (自用侧载应用,不上架 Play,QUERY_ALL_PACKAGES 无商店限制)。 -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
+    <!-- 防沉迷「屏幕时间」:声明使用情况访问权限后,Chronos 才会出现在
+         系统设置 → 特殊权限 → 使用情况访问 的列表里,用户才能勾选授权。
+         这是特殊权限,只能引导用户手动开,app 不能代点。 -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"/>
     <!-- usesCleartextTraffic:更新源与 Nocturne 外置记忆均为用户自配的 http 服务,
          需允许明文流量。若后续全部迁 https,可移除此属性。 -->
     <application
