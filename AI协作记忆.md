@@ -58,9 +58,10 @@
 ## 三、项目现状（2026-08-28 更新）
 
 - 版本号：`2.3.0+27`（pubspec.yaml）；**2.3.0 已正式发版**（2026-08-20）；此后为**未发版**累计（见 `交接文档.md` §九），**未升版本、未动 latest.json**。
-- **功能完善阶段（①-④，2026-08-28 完成）**：①记忆系统升级（DB v16：重要性/置顶/衰减/可见性/标签 + 浮现打分 + 本地语义检索 + 注入预算）；②Auto Memory（掌柜用 `<mem_create/edit/delete>` 标签自主写/改/删用户档案，标签剥离、每轮≤3、`settings_service.autoMemory` 开关）；③Token 仪表盘（`LlmUsage` + chat 顶部 `ChatTokenBar`，含缓存命中）；④交互细节（聊天长按菜单 保存图片/分支新会话、记忆页批量管理+长按复制+标签筛选、打字动画、会话文件夹 DB v17）。**测试 84 项全过**（`flutter test`），`dart analyze lib test` 零告警。
-- **回滚点已建**（git）：功能阶段备份 `a4b3508`、④成果 `7fad4d4`、文档 `2d77a8d`、拆分 `2ad1c55`、文档同步 `3c72dd6`。
-- 验证 APK：`build\app\outputs\flutter-apk\app-arm64-v8a-release.apk`（**v8a 小包，21.1MB**，用户 2026-08-28 让我「打个小包看看」时产出）；正式发布件 `releases\chronos-2.3.0.apk` 未重打。
+- **功能完善阶段（①-④，2026-08-28 完成）**：①记忆系统升级（DB v16：重要性/置顶/衰减/可见性/标签 + 浮现打分 + 本地语义检索 + 注入预算）；②Auto Memory（掌柜用 `<mem_create/edit/delete>` 标签自主写/改/删用户档案，标签剥离、每轮≤3、`settings_service.autoMemory` 开关）；③Token 仪表盘（`LlmUsage` + chat 顶部 `ChatTokenBar`，含缓存命中）；④交互细节（聊天长按菜单 保存图片/分支新会话、记忆页批量管理+长按复制+标签筛选、打字动画、会话文件夹 DB v17）。
+- **屏幕时间防沉迷（同日追加，健康页第 5 Tab，DB v18）**：读系统 UsageStats（原生 `ScreenTimePlugin.kt` 通道，无后台监控，打开时同步近 8 天）；app 三级分类（用户覆盖 > 内置娱乐预设约 28 个 > 默认工具）；今日娱乐/预算卡（超预算变红）+ 近一年 GitHub 式热力图 + 今日娱乐排行 + 分类管理页；金币联动（昨日达标发 2，type `screen`）；预算存 `screenBudgetMinutes`（默认 120 分钟）。**共 93 项测试全过**（新增 9），`dart analyze` 零告警。
+- **回滚点已建**（git）：功能阶段备份 `a4b3508`、④成果 `7fad4d4`、文档 `2d77a8d`、拆分 `2ad1c55`、文档同步 `3c72dd6`、屏幕时间 `8f60efc`。
+- 验证 APK：`build\app\outputs\flutter-apk\app-arm64-v8a-release.apk`（**v8a 小包，21.1MB**，2026-08-28 应用户「打个小包看看」产出，**不含**屏幕时间功能，装机验证屏幕时间需重打）；正式发布件 `releases\chronos-2.3.0.apk` 未重打。
 - 2.3.0 发版包含（此前的未发版改动）：
   - 闲话铺「配置正确但回复为空」修复：SSE 零事件自动降级非流式、错误事件透出、400/422 降级去掉 temperature、端点兼容。
   - 健壮性批量修复：日志 URL 脱敏（天气 Key 不再进日志）、页面加载 ErrorView+重试、金币/任务/兑换事务化、写操作兜底、备份跨版本校验、内容热更地址兼容、会话标题 emoji 截断等。
