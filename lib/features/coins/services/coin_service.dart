@@ -289,6 +289,10 @@ class CoinService {
   Future<int> rewardVideo(String date) =>
       rewardDaily(type: 'video', reason: '视频跟练打卡', amount: 1, date: date);
 
+  /// 屏幕时间达标奖励:昨日娱乐未超预算时发放(每日一次,受每日上限约束)。
+  Future<int> rewardScreen(String date) => rewardDaily(
+      type: 'screen', reason: '昨日娱乐未超预算', amount: 2, date: date);
+
   Future<List<CoinRecord>> records() async {
     final db = await _db.database;
     final rows = await db.query('coin_records', orderBy: 'created_at DESC');

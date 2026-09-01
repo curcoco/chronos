@@ -42,6 +42,8 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // 防沉迷「屏幕时间」:读系统 UsageStats(权限检测/引导/前台时长聚合/已装 app)。
+        ScreenTimePlugin.register(this, flutterEngine)
     }
 
     /// 用 FileProvider 生成 content URI,调起系统安装器安装 APK

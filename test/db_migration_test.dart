@@ -687,6 +687,83 @@ void main() {
     });
   });
 
+  group('DB 迁移 v18:屏幕时间(app 分类 + 每日用量表)', () {
+    /// 造一个 v17 结构的库(无屏幕时间两张表)。
+    Future<Database> openV17() async {
+      final db = await databaseFactory.openDatabase(
+        uniqueMemPath(),
+        options: OpenDatabaseOptions(version: 17),
+      );
+      return db;
+    }
+
+    test('迁移后 screen_app_categories / screen_usage 可读写', () async {
+      final db = await openV17();
+
+      await DbHelper.runMigrations(db, 17, DbHelper.dbVersion);
+
+      // 分类:覆盖用 INSERT OR REPLACE 语义(ConflictAlgorithm.replace)
+      await db.insert('screen_app_categories',
+          {'package': 'com.test.app', 'category': 'entertainment', 'updated_at': 1});
+      await db.insert('screen_app_categories',
+          {'package': 'com.test.app', 'category': 'tool', 'updated_at': 2},
+          conflictAlgorithm: ConflictAlgorithm.replace);
+      final cat = await db.query('screen_app_categories');
+      expect(cat.length, 1); // 同包名只留最新
+      expect(cat.first['category'], 'tool');
+
+      // 每日用量:复合主键 (day, package)
+      await db.insert('screen_usage', {
+        'day': '2026-08-28',
+        'package': 'com.ss.android.ugc.aweme',
+        'category': 'entertainment',
+        'seconds': 1800,
+      });
+      await db.insert('screen_usage', {
+        'day': '2026-08-28',
+        'package': 'com.chronos.workbench',
+        'category': 'tool',
+        'seconds': 600,
+      });
+      final rows = await db.query('screen_usage');
+      expect(rows.length, 2);
+      final sum = await db.rawQuery(
+          "SELECT COALESCE(SUM(seconds),0) AS s FROM screen_usage WHERE day = '2026-08-28'");
+      expect(sum.first['s'], 2400);
+      await db.close();
+    });
+
+    test('已有两张表的库再次迁移不报错(幂等)', () async {
+      final db = await openV17();
+      // 手动预建(模拟已迁移过的库)
+      await db.execute('''
+        CREATE TABLE screen_app_categories(
+          package TEXT PRIMARY KEY,
+          category TEXT NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE screen_usage(
+          day TEXT NOT NULL,
+          package TEXT NOT NULL,
+          category TEXT NOT NULL,
+          seconds INTEGER NOT NULL,
+          PRIMARY KEY(day, package)
+        )
+      ''');
+      await db.insert('screen_app_categories',
+          {'package': 'com.x.y', 'category': 'study', 'updated_at': 1});
+
+      await DbHelper.runMigrations(db, 17, DbHelper.dbVersion);
+
+      // 数据仍在,表结构未破坏
+      final cat = await db.query('screen_app_categories');
+      expect(cat.length, 1);
+      await db.close();
+    });
+  });
+
   group('CoinService 事务原子性(修复「并发/连点重复发币」)', () {
     setUp(() async {
       // 每个测试用全新库文件:关闭单例连接并删除 db(含 wal/shm)。

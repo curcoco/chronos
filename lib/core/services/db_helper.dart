@@ -9,7 +9,7 @@ class DbHelper {
   static final DbHelper instance = DbHelper._();
 
   /// 当前数据库版本(结构变更时递增)
-  static const int dbVersion = 17;
+  static const int dbVersion = 18;
 
   Database? _db;
 
@@ -259,6 +259,12 @@ class DbHelper {
         }
       }
     }
+    // v18:防沉迷「屏幕时间」—— app 分类表(娱乐/学习/工具,含内置预设)+
+    // 每日每 app 用量表(前台秒数,打开 app 时从系统查询回填)。
+    // 两张新表用 IF NOT EXISTS 建,天然幂等。
+    if (oldVersion < 18) {
+      await _createScreenTimeTables(db);
+    }
   }
 
   /// 确保 notes 表含 favorite / mood 列(缺则补;已有则跳过,避免重复列报错)。
@@ -477,6 +483,30 @@ class DbHelper {
     await _createPlanTable(db);
     await _createChatTables(db);
     await _createUserVideosTable(db);
+    await _createScreenTimeTables(db);
+  }
+
+  /// 防沉迷「屏幕时间」表(v18):
+  /// - screen_app_categories:app 分类(用户手动覆盖,优于内置预设);
+  /// - screen_usage:每日每 app 前台秒数(打开 app 时从 UsageStats 回填,
+  ///   category 为写入时的分类快照,便于历史按分类统计)。
+  static Future<void> _createScreenTimeTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS screen_app_categories(
+        package TEXT PRIMARY KEY,
+        category TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS screen_usage(
+        day TEXT NOT NULL,
+        package TEXT NOT NULL,
+        category TEXT NOT NULL,
+        seconds INTEGER NOT NULL,
+        PRIMARY KEY(day, package)
+      )
+    ''');
   }
 
   /// 用户自传跟练视频表(标题/本地文件路径/备注)。

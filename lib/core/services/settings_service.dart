@@ -24,6 +24,7 @@ class SettingsService {
   static const String _kBackgroundNotify = 'bg_notify';
   static const String _kAutoBackup = 'auto_backup';
   static const String _kAutoMemory = 'auto_memory';
+  static const String _kScreenBudget = 'screen_budget_minutes';
 
   /// 全局主题模式通知源:切换后 MaterialApp 监听并即时重建(无需重启)。
   final ValueNotifier<ThemeMode> themeMode =
@@ -40,6 +41,9 @@ class SettingsService {
 
   /// Auto Memory 是否启用(AI 在对话中自主写/改/删「关于用户的认知档案」;默认开)。
   final ValueNotifier<bool> autoMemory = ValueNotifier<bool>(true);
+
+  /// 每日娱乐时长预算(分钟;防沉迷「屏幕时间」用,超了变红、影响昨日金币奖励)。
+  final ValueNotifier<int> screenBudgetMinutes = ValueNotifier<int>(120);
 
   /// 背景图透明度(0.3 ~ 1.0)。
   final ValueNotifier<double> backgroundOpacity = ValueNotifier<double>(0.85);
@@ -146,6 +150,7 @@ class SettingsService {
     backgroundNotify.value =
         prefs.getBool(_kBackgroundNotify) ?? true;
     autoMemory.value = prefs.getBool(_kAutoMemory) ?? true;
+    screenBudgetMinutes.value = prefs.getInt(_kScreenBudget) ?? 120;
     backgroundOpacity.value = (prefs.getDouble(_kBackgroundOpacity) ?? 0.85)
         .clamp(0.3, 1.0);
     backgroundPath.value = prefs.getString(_kBackgroundPath) ?? '';
@@ -177,6 +182,14 @@ class SettingsService {
     autoMemory.value = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kAutoMemory, value);  }
+
+  /// 每日娱乐预算(分钟,30~300):即时生效并持久化。
+  Future<void> setScreenBudgetMinutes(int value) async {
+    final v = value.clamp(30, 300);
+    screenBudgetMinutes.value = v;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kScreenBudget, v);
+  }
 
   /// 背景图透明度(0.3~1.0):即时生效并持久化。
   Future<void> setBackgroundOpacity(double value) async {
