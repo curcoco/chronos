@@ -69,7 +69,12 @@ class _ScreenAppClassifyPageState extends State<ScreenAppClassifyPage> {
         return false;
       }
       if (_filter == 'study' && cat != ScreenTimeService.catStudy) return false;
-      if (_filter == 'tool' && cat != ScreenTimeService.catTool) return false;
+      // 「工具」= 显式标成工具 或 未分类(默认按工具计),避免未分类的从工具筛选消失。
+      if (_filter == 'tool' &&
+          cat != ScreenTimeService.catTool &&
+          cat != null) {
+        return false;
+      }
       if (_filter == 'none' && cat != null) return false;
       if (q.isNotEmpty) {
         final idx = _searchIndex[pkg] ?? pkg.toLowerCase();

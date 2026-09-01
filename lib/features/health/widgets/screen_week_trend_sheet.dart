@@ -141,6 +141,7 @@ class _WeekTrendSheetState extends State<_WeekTrendSheet> {
         .reduce((a, b) => a > b ? a : b);
     final selectedApps = _data[_selected] ?? const <ScreenAppUsage>[];
     final selectedTotal = dayTotals[_selected] ?? 0;
+    final hasAnyData = _data.isNotEmpty;
 
     return SafeArea(
       child: Padding(
@@ -162,72 +163,83 @@ class _WeekTrendSheetState extends State<_WeekTrendSheet> {
                 ],
               ),
               const SizedBox(height: 16),
-              _chart(days, dayTotals, top3, chartMax, budgetSec),
-              const SizedBox(height: 12),
-              if (top3.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Wrap(
-                    spacing: 12,
-                    runSpacing: 4,
-                    children: [
-                      for (final pkg in top3)
-                        _legend(_colorOf(pkg, top3),
-                            pkgLabels[pkg] ?? pkg),
-                      if (_hasOther(top3)) _legend(_otherColor, '其他'),
-                    ],
-                  ),
-                ),
-              const Divider(height: 28),
-              Text(
-                '${_fullDayLabel(_selected)} · ${_fmt(selectedTotal)}'
-                '${selectedTotal > budgetSec ? ' 超预算' : ''}',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: selectedTotal > budgetSec
-                      ? const Color(0xFFE53935)
-                      : AppColors.textMain,
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (selectedApps.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text('这天没有娱乐 app 使用',
+              if (!hasAnyData) ...[
+                Container(
+                  height: 130,
+                  alignment: Alignment.center,
+                  child: Text('本周暂无娱乐记录',
                       style:
-                          TextStyle(fontSize: 12, color: AppColors.textSub)),
-                )
-              else
-                for (final app in selectedApps)
+                          TextStyle(fontSize: 13, color: AppColors.textSub)),
+                ),
+                const SizedBox(height: 12),
+              ] else ...[
+                _chart(days, dayTotals, top3, chartMax, budgetSec),
+                const SizedBox(height: 12),
+                if (top3.isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 4,
                       children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: _colorOf(app.packageName, top3),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(app.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 13)),
-                        ),
-                        Text(
-                          '${app.minutes}分钟 · '
-                          '${(app.seconds / (selectedTotal == 0 ? 1 : selectedTotal) * 100).round()}%',
-                          style: TextStyle(
-                              fontSize: 12, color: AppColors.textSub),
-                        ),
+                        for (final pkg in top3)
+                          _legend(_colorOf(pkg, top3),
+                              pkgLabels[pkg] ?? pkg),
+                        if (_hasOther(top3)) _legend(_otherColor, '其他'),
                       ],
                     ),
                   ),
+                const Divider(height: 28),
+                Text(
+                  '${_fullDayLabel(_selected)} · ${_fmt(selectedTotal)}'
+                  '${selectedTotal > budgetSec ? ' 超预算' : ''}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: selectedTotal > budgetSec
+                        ? const Color(0xFFE53935)
+                        : AppColors.textMain,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (selectedApps.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text('这天没有娱乐 app 使用',
+                        style: TextStyle(
+                            fontSize: 12, color: AppColors.textSub)),
+                  )
+                else
+                  for (final app in selectedApps)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: _colorOf(app.packageName, top3),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(app.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13)),
+                          ),
+                          Text(
+                            '${app.minutes}分钟 · '
+                            '${(app.seconds / (selectedTotal == 0 ? 1 : selectedTotal) * 100).round()}%',
+                            style: TextStyle(
+                                fontSize: 12, color: AppColors.textSub),
+                          ),
+                        ],
+                      ),
+                    ),
+              ],
             ],
           ),
         ),

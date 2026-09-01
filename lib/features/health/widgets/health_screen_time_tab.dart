@@ -8,6 +8,7 @@ import 'package:chronos/features/health/pages/screen_app_classify_page.dart';
 import 'package:chronos/features/health/services/screen_time_service.dart';
 import 'package:chronos/features/health/widgets/health_common.dart';
 import 'package:chronos/features/health/widgets/screen_week_trend_sheet.dart';
+import 'package:chronos/core/widgets/status_views.dart';
 
 /// 健康「屏幕时间」Tab(防沉迷):
 /// 权限门 → 今日娱乐/预算卡 → 娱乐热力图(近一年,GitHub 式)→ 今日娱乐排行 → 分类管理入口。
@@ -25,6 +26,7 @@ class _HealthScreenTimeTabState extends State<HealthScreenTimeTab>
   final ScrollController _heatCtrl = ScrollController();
 
   bool _loading = true;
+  String? _error; // 同步/查询失败时的提示(渲染 ErrorView + 重试,不再静默空白)
   bool _permitted = false;
 
   int _todayEnt = 0; // 秒
@@ -60,7 +62,10 @@ class _HealthScreenTimeTabState extends State<HealthScreenTimeTab>
   }
 
   Future<void> _refresh() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final permitted = await _service.hasPermission();
       if (!permitted) {
@@ -109,7 +114,10 @@ class _HealthScreenTimeTabState extends State<HealthScreenTimeTab>
       _scrollHeatToEnd();
     } catch (_) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _error = '屏幕时间数据加载失败,请重试';
+      });
     }
   }
 
@@ -141,6 +149,7 @@ class _HealthScreenTimeTabState extends State<HealthScreenTimeTab>
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
+    if (_error != null) return _errorView();
     if (!_permitted) return _permissionGate();
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
@@ -157,6 +166,13 @@ class _HealthScreenTimeTabState extends State<HealthScreenTimeTab>
   }
 
   // ---------- 权限门 ----------
+
+  Widget _errorView() {
+    return ErrorView(
+      message: _error!,
+      onRetry: _refresh,
+    );
+  }
 
   Widget _permissionGate() {
     return ListView(
