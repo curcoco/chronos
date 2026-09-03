@@ -23,6 +23,7 @@ import 'package:chronos/core/widgets/app_text_field.dart';
 import 'package:chronos/core/widgets/frosted_snack.dart';
 import 'package:chronos/core/widgets/status_views.dart';
 import 'package:chronos/features/chat/models/chat_session.dart';
+import 'package:chronos/features/chat/pages/image_gen_page.dart';
 import 'package:chronos/features/chat/pages/session_list_page.dart';
 import 'package:chronos/features/chat/services/llm_usage.dart';
 import 'package:chronos/features/chat/widgets/chat_token_bar.dart';
@@ -93,7 +94,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   String _userAvatar = ''; // 用户头像本地路径(空 = 未设置,显示占位图标)
   String? _pendingImagePath; // 已选待发送的图片
   bool _picking = false;
-  bool _generating = false; // 生图中
   bool _sending = false;
   bool _translating = false; // 翻译中,防重复触发
   bool _llmOk = false;
@@ -687,65 +687,18 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   static String _mimeOf(String path) =>
       path.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
 
-  /// 把图片字节保存到 chat_imgs/,返回本地路径。
-  Future<String> _persistImageBytes(Uint8List bytes, String ext) async {
-    final docs = await getApplicationDocumentsDirectory();
-    final dir = Directory(p.join(docs.path, 'chat_imgs'));
-    if (!await dir.exists()) await dir.create(recursive: true);
-    final dest =
-        p.join(dir.path, 'gen_${DateTime.now().millisecondsSinceEpoch}.$ext');
-    await File(dest).writeAsBytes(bytes);
-    return dest;
-  }
-
-  /// 生成图片:输入提示词 → 调生图模型(GPT-image-2 等)→ 存为聊天图片消息并落库。
+  /// 生成图片:进入生图工作台(提示词/底图/尺寸/清晰度/张数/风格)→ 调生图模型
+  /// → 预览勾选 → 返回选中的图片,作为 assistant 图片消息落库并回显。
+  /// 生成图气泡自带「让掌柜看看这张图」按钮,可把图发给掌柜继续对话。
   Future<void> _generateImage() async {
-    final url = await KeyStore.instance.get(KeyStore.imageGenUrl);
-    final key = await KeyStore.instance.get(KeyStore.imageGenKey);
-    final model = await KeyStore.instance.get(KeyStore.imageGenModel);
+    if (_sending) return;
     if (!mounted) return;
-    if (url.isEmpty || key.isEmpty || model.isEmpty) {
-      showFrostedSnack(context, '未配置生图模型,请到 设置 → API 配置 填写');
-      return;
-    }
-    final promptCtrl = TextEditingController();
-    final prompt = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('生成图片'),
-        content: AppTextField(
-          controller: promptCtrl,
-          maxLines: 3,
-          hintText: '描述你想生成的画面…',
-          onSubmit: () => Navigator.of(ctx).pop(promptCtrl.text.trim()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(promptCtrl.text.trim()),
-            child: const Text('生成'),
-          ),
-        ],
-      ),
+    final paths = await AppRoutes.push<List<String>>(
+      context,
+      const ImageGenPage(),
     );
-    if (prompt == null || prompt.isEmpty || !mounted) return;
-    setState(() => _generating = true);
-    try {
-      final result = await AiProviders.generateImage(
-        url: url,
-        apiKey: key,
-        model: model,
-        prompt: prompt,
-      ).timeout(const Duration(seconds: 120));
-      if (!mounted) return;
-      if (result == null) {
-        showFrostedSnack(context, '生成失败:请检查生图模型配置或网络');
-        return;
-      }
-      final path = await _persistImageBytes(result.bytes, 'png');
+    if (paths == null || paths.isEmpty || !mounted) return;
+    for (final path in paths) {
       if (!mounted) return;
       setState(() {
         _messages.add((
@@ -757,14 +710,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         ));
       });
       await _appendMessage('assistant', '已生成图片', imagePath: path);
-      _scrollToBottom();
-    } catch (e) {
-      if (!mounted) return;
-      AppLog.instance.e('生图失败:$e');
-      showFrostedSnack(context, '生成失败,请重试');
-    } finally {
-      if (mounted) setState(() => _generating = false);
     }
+    _scrollToBottom();
   }
 
   /// 让掌柜看生成的图:把图片作为图片消息发出(走 _send,默认模型→OCR 回退)。
@@ -1384,16 +1331,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // 生图按钮:输入提示词生成图片(GPT-image-2 等,需配置生图模型)。
+                  // 生图按钮:进入生图工作台(提示词/底图/尺寸/张数/风格)。
                   IconButton(
-                    onPressed: _generating ? null : _generateImage,
-                    icon: _generating
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : Icon(Icons.brush_rounded,
-                            size: 22, color: AppColors.textSub),
+                    onPressed: _sending ? null : _generateImage,
+                    icon: Icon(Icons.brush_rounded,
+                        size: 22, color: AppColors.textSub),
                     tooltip: '生成图片',
                   ),
                   const SizedBox(width: 4),

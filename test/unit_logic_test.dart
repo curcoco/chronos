@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chronos/main.dart';
 import 'package:chronos/core/services/ai_provider.dart';
@@ -420,6 +422,104 @@ void main() {
       expect(
         LlmService.endpointFor('http://120.76.230.67:18011/v1'),
         'http://120.76.230.67:18011/v1/chat/completions',
+      );
+    });
+  });
+
+  group('生图模型(AiProviders 生图接口兼容 / 参数化)', () {
+    test('imageEndpointFor:根地址自动补 /v1 + /images/generations', () {
+      expect(
+        AiProviders.imageEndpointFor('https://api.example.com'),
+        'https://api.example.com/v1/images/generations',
+      );
+      expect(
+        AiProviders.imageEndpointFor('https://api.example.com/v1'),
+        'https://api.example.com/v1/images/generations',
+      );
+      expect(
+        AiProviders.imageEndpointFor('https://api.example.com/v1/'),
+        'https://api.example.com/v1/images/generations',
+      );
+    });
+
+    test('imageEndpointFor:已带完整端点或多级版本段不重复拼接', () {
+      expect(
+        AiProviders.imageEndpointFor(
+            'https://api.example.com/v1/images/generations'),
+        'https://api.example.com/v1/images/generations',
+      );
+      expect(
+        AiProviders.imageEndpointFor('https://api.example.com/openai/v1'),
+        'https://api.example.com/openai/v1/images/generations',
+      );
+    });
+
+    test('ImageGenOptions.toBody:默认只带必要字段', () {
+      final body = const ImageGenOptions(model: 'gpt-image-2', prompt: 'a cat')
+          .toBody();
+      expect(body['model'], 'gpt-image-2');
+      expect(body['prompt'], 'a cat');
+      expect(body['n'], 1);
+      expect(body['response_format'], 'b64_json');
+      expect(body.containsKey('size'), isFalse);
+      expect(body.containsKey('quality'), isFalse);
+      expect(body.containsKey('image'), isFalse);
+    });
+
+    test('ImageGenOptions.toBody:尺寸/清晰度/张数/风格/底图都带上', () {
+      final body = const ImageGenOptions(
+        model: 'gpt-image-2',
+        prompt: 'a cat',
+        size: '1792x1024',
+        quality: 'hd',
+        n: 2,
+        style: 'vivid',
+        imageBase64: 'aW1n',
+      ).toBody();
+      expect(body['size'], '1792x1024');
+      expect(body['quality'], 'hd');
+      expect(body['n'], 2);
+      expect(body['style'], 'vivid');
+      expect(body['image'], 'aW1n');
+    });
+
+    test('mimeForBytes:按图片头字节识别类型,识别不了回退 png', () {
+      expect(
+        AiProviders.mimeForBytes(
+            Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])),
+        'image/png',
+      );
+      expect(
+        AiProviders.mimeForBytes(Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0])),
+        'image/jpeg',
+      );
+      expect(
+        AiProviders.mimeForBytes(
+            Uint8List.fromList([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50])),
+        'image/webp',
+      );
+      expect(
+        AiProviders.mimeForBytes(Uint8List.fromList([0x47, 0x49, 0x46, 0x38, 0x39, 0x61])),
+        'image/gif',
+      );
+      expect(
+        AiProviders.mimeForBytes(Uint8List.fromList([1, 2, 3])),
+        'image/png',
+      );
+    });
+
+    test('ImageGenResult.ext:按 mime 推导扩展名', () {
+      expect(
+        ImageGenResult(Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0])).ext,
+        'jpg',
+      );
+      expect(
+        ImageGenResult(Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 0, 0, 0, 0])).ext,
+        'png',
+      );
+      expect(
+        ImageGenResult(Uint8List.fromList([0x47, 0x49, 0x46, 0x38, 0x39, 0x61])).ext,
+        'gif',
       );
     });
   });

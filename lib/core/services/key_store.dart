@@ -33,6 +33,10 @@ class KeyStore {
   static const String imageGenKey = 'image_gen_key';
   static const String imageGenModel = 'image_gen_model';
 
+  /// 生图工作台选中的模型引用("providerId|modelId",见 AiProviders)。
+  /// 刻意不放进 [allKeys](API 配置页以文本框渲染,生图模型选择在生图工作台内)。
+  static const String imageGenRef = 'image_gen_ref';
+
   static const List<String> allKeys = [
     llmBaseUrl,
     llmApiKey,

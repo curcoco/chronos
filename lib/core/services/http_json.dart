@@ -72,6 +72,32 @@ class HttpJson {
     return jsonDecode(text) as Map<String, dynamic>;
   }
 
+  /// GET 并返回原始响应体字节(如生图模型回传的 url 二次下载)。
+  /// 非 2xx 抛 [HttpJsonException](带脱敏后的响应体片段)。
+  static Future<List<int>> getBytes(
+    String url, {
+    Map<String, String>? headers,
+    Duration? connectTimeout,
+    Duration? ioTimeout,
+  }) async {
+    final req = await _client
+        .getUrl(Uri.parse(url))
+        .timeout(connectTimeout ?? defaultConnectTimeout);
+    headers?.forEach(req.headers.set);
+    final res = await req.close().timeout(ioTimeout ?? defaultIoTimeout);
+    final bytes = <int>[];
+    await for (final chunk in res.timeout(ioTimeout ?? defaultIoTimeout)) {
+      bytes.addAll(chunk);
+    }
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      final brief = LogSanitize.mask(
+          LogSanitize.brief(utf8.decode(bytes, allowMalformed: true)));
+      AppLog.instance.e('HTTP GET ${LogSanitize.mask(url)} → ${res.statusCode}: $brief');
+      throw HttpJsonException(res.statusCode, '服务返回 ${res.statusCode}: $brief');
+    }
+    return bytes;
+  }
+
   /// POST JSON,返回响应体原文。
   static Future<String> postText(
     String url, {

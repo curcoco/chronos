@@ -12,9 +12,60 @@ import 'package:chronos/core/services/key_store.dart';
 import 'package:chronos/core/services/notification_service.dart';
 import 'package:chronos/core/services/settings_service.dart';
 import 'package:chronos/core/theme.dart';
+import 'package:chronos/core/widgets/overlay_toast.dart';
+
+/// 全局根导航 Key:供全局错误兜底随时取得界面上下文以弹出提示。
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
+/// 安装全局错误兜底。
+///
+/// 把「未捕获异常」与「Flutter 框架错误」统一接住:记入 [AppLog] 可回溯,
+/// 并通过底部提示条给用户一句话反馈,避免异常发生时**无反馈的白屏/卡死**。
+/// - 异步/事件回调里未捕获的错误经 [PlatformDispatcher.onError] 回到这里,
+///   返回 `true` 表示已处理,应用不会因此被终止;
+/// - 框架构建/布局错误经 [FlutterError.onError] 回到这里,同时保留
+///   [FlutterError.presentError],让 debug 控制台仍能看到现场。
+/// 提示条做节流(1.5s),防止循环报错刷屏;整体 try/finally 防二次进入。
+void _installGlobalErrorHandlers() {
+  bool reporting = false;
+  DateTime lastToast = DateTime.fromMillisecondsSinceEpoch(0);
+
+  void report(String what) {
+    if (reporting) return;
+    reporting = true;
+    try {
+      AppLog.instance.e(what);
+      final now = DateTime.now();
+      if (now.difference(lastToast).inMilliseconds < 1500) return;
+      lastToast = now;
+      // 等当前帧渲染完再弹,避免在构建/布局出错时触碰 Overlay。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = appNavigatorKey.currentContext;
+        if (ctx == null || !ctx.mounted) return;
+        try {
+          OverlayToast.instance.show(ctx, message: '遇到了一点问题,已记入日志');
+        } catch (_) {}
+      });
+    } finally {
+      reporting = false;
+    }
+  }
+
+  FlutterError.onError = (details) {
+    report('框架错误:${details.exceptionAsString()}');
+    try {
+      FlutterError.presentError(details);
+    } catch (_) {}
+  };
+  ui.PlatformDispatcher.instance.onError = (error, stack) {
+    report('未捕获异常:$error\n$stack');
+    return true;
+  };
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _installGlobalErrorHandlers();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   // 启动前载入视觉设置(主题模式 / 色板 / 背景图),避免首帧闪烁。
   await SettingsService.instance.loadVisualSettings();
@@ -85,6 +136,7 @@ class StudentWorkbenchApp extends StatelessWidget {
         return MaterialApp(
           title: 'Chronos',
           debugShowCheckedModeBanner: false,
+          navigatorKey: appNavigatorKey,
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),
           themeMode: SettingsService.instance.themeMode.value,

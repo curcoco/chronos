@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:chronos/core/services/app_log.dart';
+import 'package:chronos/core/services/http_json.dart';
 import 'package:chronos/core/services/key_store.dart';
+import 'package:chronos/core/utils/log_sanitize.dart';
 
 /// 一个 AI 提供商(中转站):独立地址 / Key / 启用开关 / 模型列表。
 /// 由 [AiProviders] 整体序列化存于安全存储(含 API Key,Keystore 加密)。
@@ -299,62 +302,253 @@ class AiProviders {
   }
 
   /// 生图端点(OpenAI 兼容 /images/generations):兼容根地址 / 带 /v1 / 已带完整端点。
+  /// 与 [LlmService.endpointFor](只补 /chat/completions)不同:生图端点通常在
+  /// `/v1` 之下,故对不含版本路径段的基础地址补 `/v1`。
   static String imageEndpointFor(String url) {
     var b = url.replaceAll(RegExp(r'/$'), '');
     if (b.endsWith('/images/generations')) return b;
-    if (!b.endsWith('/v1')) b = '$b/v1';
+    // 已含版本路径段(如 /v1、/openai/v1)不重复补。
+    if (!RegExp(r'/(v\d+)$').hasMatch(b)) b = '$b/v1';
     return '$b/images/generations';
   }
 
-  /// 生图(OpenAI 兼容 `/images/generations`):文字提示 → 图片字节。
-  /// 返回解码后的 (图片字节, mime);失败/服务商不支持返回 null。
-  static Future<({Uint8List bytes, String mime})?> generateImage({
+  /// 生图(OpenAI 兼容 `/images/generations`):文字提示(可带底图/风格/尺寸/张数)
+  /// → 图片字节列表。失败抛 [ImageGenException](带用户可读原因与状态码)。
+  ///
+  /// - 走统一 [HttpJson],连接池复用 + 失败日志脱敏 + 错误体透出;
+  /// - 默认请求 `response_format: b64_json`(多数中转站支持,避免二次下载 url);
+  /// - 兜底解析 `url`(经 [HttpJson.getBytes] 下载);
+  /// - mime 按图片头字节判断,不写死。
+  static Future<List<ImageGenResult>> generateImage({
     required String url,
     required String apiKey,
-    required String model,
-    required String prompt,
+    required ImageGenOptions options,
   }) async {
     final endpoint = imageEndpointFor(url);
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 15);
+    final primary = options.toBody();
+
+    // 部分模型/代理不支持 size/quality/style/n>1 等可选参数 → 400/422。
+    // 此时去掉这些可选参数重试一次(只保留 model/prompt/n=1/response_format),
+    // 保证「基本生图可用」,与聊天路径的 400/422 降级哲学一致。
+    Map<String, dynamic> data;
     try {
-      final req = await client
-          .postUrl(Uri.parse(endpoint))
-          .timeout(const Duration(seconds: 15));
-      req.headers.contentType = ContentType.json;
-      req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $apiKey');
-      req.write(jsonEncode({'model': model, 'prompt': prompt}));
-      final res = await req.close().timeout(const Duration(seconds: 90));
-      final body =
-          await res.transform(utf8.decoder).join().timeout(const Duration(seconds: 90));
-      if (res.statusCode != HttpStatus.ok) return null;
-      final data = jsonDecode(body);
-      if (data is! Map<String, dynamic>) return null;
-      final list = data['data'];
-      if (list is! List || list.isEmpty) return null;
-      final item = list.first;
-      if (item is! Map<String, dynamic>) return null;
-      // b64_json 优先(多数中转站),其次 url(需下载)。
+      data = await _postGenSafe(endpoint, apiKey, primary);
+    } on ImageGenException catch (e) {
+      if ((e.statusCode == 400 || e.statusCode == 422) &&
+          _hasOptionalParams(primary)) {
+        data = await _postGenSafe(endpoint, apiKey, _reducedBody(primary));
+      } else {
+        rethrow;
+      }
+    }
+
+    final list = data['data'];
+    if (list is! List || list.isEmpty) {
+      throw ImageGenException('生成图片失败:服务商未返回图片');
+    }
+    final results = <ImageGenResult>[];
+    for (final item in list) {
+      if (item is! Map<String, dynamic>) continue;
       final b64 = item['b64_json'] as String?;
       if (b64 != null && b64.isNotEmpty) {
-        return (bytes: base64Decode(b64), mime: 'image/png');
+        results.add(ImageGenResult(base64Decode(b64)));
+        continue;
       }
       final urlStr = item['url'] as String?;
       if (urlStr != null && urlStr.isNotEmpty) {
-        final imgReq =
-            await client.getUrl(Uri.parse(urlStr)).timeout(const Duration(seconds: 20));
-        final imgRes = await imgReq.close().timeout(const Duration(seconds: 90));
-        final bytes = await imgRes
-            .fold<List<int>>(<int>[], (a, b) => a..addAll(b))
-            .timeout(const Duration(seconds: 90));
-        if (bytes.isEmpty) return null;
-        return (bytes: Uint8List.fromList(bytes), mime: 'image/png');
+        final bytes = await _downloadImage(urlStr);
+        if (bytes != null) results.add(ImageGenResult(bytes));
       }
+    }
+    if (results.isEmpty) {
+      throw ImageGenException('生成图片失败:服务商未返回图片');
+    }
+    return results;
+  }
+
+  /// 按图片头字节判断 mime(不写死;识别不了回退 png)。
+  static String mimeForBytes(Uint8List b) {
+    if (b.length >= 8 && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E &&
+        b[3] == 0x47) {
+      return 'image/png';
+    }
+    if (b.length >= 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF) {
+      return 'image/jpeg';
+    }
+    if (b.length >= 12 && b[0] == 0x52 && b[1] == 0x49 && b[2] == 0x46 &&
+        b[3] == 0x46 && b[8] == 0x57 && b[9] == 0x45 && b[10] == 0x42 &&
+        b[11] == 0x50) {
+      return 'image/webp';
+    }
+    if (b.length >= 6 && b[0] == 0x47 && b[1] == 0x49 && b[2] == 0x46 &&
+        b[3] == 0x38) {
+      return 'image/gif';
+    }
+    return 'image/png';
+  }
+
+  static Future<Uint8List?> _downloadImage(String url) async {
+    try {
+      final bytes = await HttpJson.getBytes(
+        url,
+        connectTimeout: const Duration(seconds: 20),
+        ioTimeout: const Duration(seconds: 90),
+      );
+      if (bytes.isEmpty) return null;
+      return Uint8List.fromList(bytes);
+    } catch (e) {
+      AppLog.instance.e('生图 URL 下载失败:${LogSanitize.mask(url)} $e');
       return null;
-    } catch (_) {
-      return null;
-    } finally {
-      client.close(force: true);
     }
   }
+
+  static Future<Map<String, dynamic>> _postGen(
+      String endpoint, String apiKey, Map<String, dynamic> body) {
+    return HttpJson.postJson(
+      endpoint,
+      headers: {HttpHeaders.authorizationHeader: 'Bearer $apiKey'},
+      body: body,
+      connectTimeout: const Duration(seconds: 15),
+      ioTimeout: const Duration(seconds: 120),
+    );
+  }
+
+  /// 统一错误包装:网络/非 2xx 一律转成 [ImageGenException](带可读原因与状态码)。
+  static Future<Map<String, dynamic>> _postGenSafe(
+      String endpoint, String apiKey, Map<String, dynamic> body) async {
+    try {
+      return await _postGen(endpoint, apiKey, body);
+    } on ImageGenException {
+      rethrow;
+    } on HttpJsonException catch (e) {
+      throw ImageGenException(_friendlyGenError(e), statusCode: e.statusCode);
+    } on Exception catch (e) {
+      AppLog.instance.e('生图请求异常:${LogSanitize.mask(endpoint)} $e');
+      throw ImageGenException('生成图片失败:网络异常,请稍后重试');
+    }
+  }
+
+  /// 去可选参数的重试体:去掉 size/quality/style/negative_prompt,n 收敛为 1。
+  static Map<String, dynamic> _reducedBody(Map<String, dynamic> body) {
+    final m = Map<String, dynamic>.from(body)
+      ..remove('size')
+      ..remove('quality')
+      ..remove('style')
+      ..remove('negative_prompt');
+    m['n'] = 1;
+    return m;
+  }
+
+  /// 请求体是否含「可能不被支持」的可选参数(触发降级重试的条件)。
+  static bool _hasOptionalParams(Map<String, dynamic> body) {
+    return body.containsKey('size') ||
+        body.containsKey('quality') ||
+        body.containsKey('style') ||
+        body.containsKey('negative_prompt') ||
+        (body['n'] is int && (body['n'] as int) > 1);
+  }
+
+  static String _friendlyGenError(HttpJsonException e) {
+    switch (e.statusCode) {
+      case 400:
+        return '生成失败:模型或参数不受支持(400),请换生图模型或调整参数';
+      case 401:
+      case 403:
+        return '生成失败:密钥无效或无权限(${e.statusCode}),请检查生图模型 Key';
+      case 402:
+      case 429:
+        return '生成失败:额度不足或请求太频繁(${e.statusCode}),请稍后再试';
+      case 404:
+        return '生成失败:生图端点不存在(404),请检查生图模型地址';
+      case 422:
+        return '生成失败:提示词或参数不合法(422),请调整后重试';
+      default:
+        return '生成失败:服务返回 ${e.statusCode}(${e.message}),请检查生图模型配置';
+    }
+  }
+}
+
+/// 生图请求参数(OpenAI 兼容 `/images/generations`)。
+class ImageGenOptions {
+  final String model;
+
+  /// 正向提示词。非空必填。
+  final String prompt;
+
+  /// 负向提示词(部分模型支持,作为可选项;不支持时会 400,由调用方兜底)。
+  final String? negativePrompt;
+
+  /// 尺寸,如 `1024x1024` / `1792x1024` / `1024x1792`;null 由服务商默认。
+  final String? size;
+
+  /// 清晰度:`standard` / `hd`。
+  final String? quality;
+
+  /// 一次生成的张数(1~4)。默认 1。
+  final int n;
+
+  /// 响应格式:`b64_json` / `url`。默认 `b64_json`(避免二次下载)。
+  final String? responseFormat;
+
+  /// 风格(部分模型支持):`vivid` / `natural` 等。
+  final String? style;
+
+  /// 图生图/编辑底图(base64,不含 `data:` 前缀);null = 文生图。
+  final String? imageBase64;
+
+  const ImageGenOptions({
+    required this.model,
+    required this.prompt,
+    this.negativePrompt,
+    this.size,
+    this.quality,
+    this.n = 1,
+    this.responseFormat = 'b64_json',
+    this.style,
+    this.imageBase64,
+  });
+
+  /// 发送到服务商的请求体(供单测校验参数是否按需带上)。
+  Map<String, dynamic> toBody() {
+    final body = <String, dynamic>{
+      'model': model,
+      'prompt': prompt,
+      'n': n,
+      'response_format': responseFormat ?? 'b64_json',
+    };
+    if (size != null) body['size'] = size;
+    if (quality != null) body['quality'] = quality;
+    if (style != null) body['style'] = style;
+    if (negativePrompt != null && negativePrompt!.isNotEmpty) {
+      body['negative_prompt'] = negativePrompt;
+    }
+    if (imageBase64 != null && imageBase64!.isNotEmpty) {
+      body['image'] = imageBase64;
+    }
+    return body;
+  }
+}
+
+/// 生图结果:图片字节 + 按字节头推导的 mime/扩展名。
+class ImageGenResult {
+  final Uint8List bytes;
+  ImageGenResult(this.bytes);
+
+  String get mime => AiProviders.mimeForBytes(bytes);
+  String get ext => switch (mime) {
+        'image/jpeg' => 'jpg',
+        'image/webp' => 'webp',
+        'image/gif' => 'gif',
+        _ => 'png',
+      };
+}
+
+/// 生图失败(带用户可读原因与可选的 HTTP 状态码)。
+class ImageGenException implements Exception {
+  final String message;
+  final int? statusCode;
+  const ImageGenException(this.message, {this.statusCode});
+
+  @override
+  String toString() => message;
 }

@@ -18,6 +18,7 @@ import 'package:chronos/features/coins/pages/coin_center_page.dart';
 import 'package:chronos/features/diary/pages/diary_page.dart';
 import 'package:chronos/features/english/pages/english_page.dart';
 import 'package:chronos/features/health/pages/health_page.dart';
+import 'package:chronos/features/health/pages/screen_time_page.dart';
 import 'package:chronos/features/review/pages/review_page.dart';
 
 /// 侧边栏:应用信息 + 版本与更新 + 系统设置入口 + 功能模块。
@@ -357,16 +358,30 @@ class _AppDrawerState extends State<AppDrawer> {
                           color: AppColors.textSub),
                     ),
                   ),
-                  // 其余模块入口(原知识/生活 Tab 的内容收进侧边栏)
-                  _moduleTile(Icons.translate_rounded, '英文积累', const EnglishPage()),
-                  _moduleTile(
-                      Icons.favorite_rounded, '健康管理', const HealthPage()),
-                  _moduleTile(Icons.task_alt_rounded, '每日复盘', const ReviewPage()),
-                  _moduleTile(
-                      Icons.menu_book_rounded, '写日记', const DiaryPage()),
-                  _moduleTile(
-                      Icons.monetization_on_rounded, '金币中心', const CoinCenterPage()),
-                  const Spacer(),
+                  // 其余模块入口(原知识/生活 Tab 的内容收进侧边栏)。
+                  // 屏幕时间已独立成模块入口(与健康管理平级,见 ScreenTimePage)。
+                  // 模块列表在空间不足时可滚动,系统设置始终固定在底部。
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _moduleTile(
+                              Icons.translate_rounded, '英文积累', const EnglishPage()),
+                          _moduleTile(
+                              Icons.favorite_rounded, '健康管理', const HealthPage()),
+                          _moduleTile(
+                              Icons.task_alt_rounded, '每日复盘', const ReviewPage()),
+                          _moduleTile(
+                              Icons.menu_book_rounded, '写日记', const DiaryPage()),
+                          _moduleTile(
+                              Icons.monetization_on_rounded, '金币中心', const CoinCenterPage()),
+                          _moduleTile(
+                              Icons.timer_outlined, '屏幕时间', const ScreenTimePage()),
+                        ],
+                      ),
+                    ),
+                  ),
                   // 系统设置:置于抽屉最底部。
                   _frostTile(
                     onTap: _openSettings,

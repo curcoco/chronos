@@ -6,15 +6,14 @@ import 'package:chronos/features/health/models/workout.dart';
 import 'package:chronos/features/health/services/health_service.dart';
 import 'package:chronos/features/health/widgets/health_heat_tab.dart';
 import 'package:chronos/features/health/widgets/health_kitchen_tab.dart';
-import 'package:chronos/features/health/widgets/health_screen_time_tab.dart';
 import 'package:chronos/features/health/widgets/health_video_tab.dart';
 import 'package:chronos/features/health/widgets/health_workout_tab.dart';
 import 'package:chronos/core/services/app_log.dart';
 import 'package:chronos/core/widgets/status_views.dart';
 
-/// 健康管理:厨房秘籍 / 运动记录 / 视频跟练(含用户自传视频)/ 运动日历 / 屏幕时间(防沉迷)。
+/// 健康管理:厨房秘籍 / 运动记录 / 视频跟练(含用户自传视频)/ 运动日历。
 /// 各 Tab 内容拆到 widgets/health/ 下的独立组件,本页只负责
-/// 数据加载、状态共享与 TabBar 组装(屏幕时间 Tab 自含数据,不走本页)。
+/// 数据加载、状态共享与 TabBar 组装(屏幕时间已独立成侧边栏入口,见 ScreenTimePage)。
 class HealthPage extends StatefulWidget {
   const HealthPage({super.key});
 
@@ -68,7 +67,7 @@ class _HealthPageState extends State<HealthPage> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 5,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('健康管理'),
@@ -80,7 +79,6 @@ class _HealthPageState extends State<HealthPage> {
               Tab(text: '运动记录'),
               Tab(text: '视频跟练'),
               Tab(text: '运动日历'),
-              Tab(text: '屏幕时间'),
             ],
           ),
         ),
@@ -115,7 +113,6 @@ class _HealthPageState extends State<HealthPage> {
                     onChanged: _reload,
                   ),
                   HealthHeatTab(workouts: _workouts),
-                  const HealthScreenTimeTab(),
                 ],
               ),
       ),
